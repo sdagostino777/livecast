@@ -69,7 +69,10 @@ export interface PipelineArgsOptions {
  */
 function inputFlags(inputUrl: string): string[] {
   if (inputUrl.startsWith("rtsp://")) {
-    return ["-rtsp_transport", "tcp", "-rw_timeout", "15000000"];
+    // RTSP demuxer option names differ from the generic ones: `-timeout`
+    // (microseconds, socket I/O) exists, `-rw_timeout` does not — using the
+    // wrong name makes FFmpeg exit immediately with "Option not found".
+    return ["-rtsp_transport", "tcp", "-timeout", "15000000"];
   }
   return [];
 }
