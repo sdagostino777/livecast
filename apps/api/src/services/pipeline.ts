@@ -61,6 +61,19 @@ export interface PipelineArgsOptions {
  * side too — OBS may still send video, and this drops it without paying for a
  * scale + x264 ladder.
  */
+
+/**
+ * Input-specific flags. RTSP is read over TCP (UDP loses packets on a VPS and
+ * makes the read stall) and with a timeout, so a dead source fails fast instead
+ * of parking the broadcast on "Preparazione…".
+ */
+function inputFlags(inputUrl: string): string[] {
+  if (inputUrl.startsWith("rtsp://")) {
+    return ["-rtsp_transport", "tcp", "-rw_timeout", "15000000"];
+  }
+  return [];
+}
+
 export function buildFfmpegAudioArgs(opts: PipelineArgsOptions): string[] {
   const args: string[] = [
     "-hide_banner",
@@ -69,6 +82,7 @@ export function buildFfmpegAudioArgs(opts: PipelineArgsOptions): string[] {
     "warning",
     "-fflags",
     "+genpts",
+    ...inputFlags(opts.inputUrl),
     "-i",
     opts.inputUrl,
     "-vn",
@@ -135,6 +149,7 @@ export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
     // Repeat timestamps so a publisher that restarts does not poison the HLS timelines.
     "-fflags",
     "+genpts",
+    ...inputFlags(opts.inputUrl),
     "-i",
     opts.inputUrl,
     "-filter_complex",
@@ -288,9 +303,13 @@ export function probeMedia(ffmpegBin: string, url: string, timeoutMs = 8000): Pr
   const ffprobe = ffmpegBin.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
   return new Promise((resolve) => {
     let settled = false;
-    const child = spawn(ffprobe, ["-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", url], {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    const child = spawn(
+      ffprobe,
+      ["-v", "error", ...inputFlags(url), "-show_entries", "stream=codec_type", "-of", "csv=p=0", url],
+      {
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
     let out = "";
     const finish = (value: { video: boolean; audio: boolean } | null) => {
       if (settled) return;

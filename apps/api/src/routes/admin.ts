@@ -502,7 +502,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
               detail: `${slug}:${reason}`,
             });
           },
-          onLog: (line) => app.log.debug({ slug, line }),
+          onLog: (line) => {
+            // Encoder stderr is the only window into a stuck broadcast: errors
+            // must reach the journal, not disappear at debug level.
+            if (/error|failed|invalid|timed out|unable/i.test(line)) app.log.warn({ slug, line: line.slice(0, 300) });
+            else app.log.debug({ slug, line });
+          },
         },
       );
     } catch (err) {
