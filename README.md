@@ -87,8 +87,9 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 ![The panel while live — green LEDs per publisher, capacity banner, settings](docs/screenshots/admin.png)
 
-- **Diretta** — create a broadcast, "Crea e vai in onda", stop it, and copy the
-  public link. OBS credentials are masked until revealed (the reveal is audited).
+- **Diretta** — create a broadcast with its title, kind and event images ("Crea"),
+  then start it from the list with "Vai in onda" when you are ready. Stop it and
+  copy the public link. OBS credentials are masked until revealed (audited).
 - **Dirette** — previous broadcasts with their kind (video / audio-only), poster
   thumbnail and link. Deleted rows never own files on disk.
 - **⚙ Impostazioni** — the gear opens a page with **Aspetto** (light / dark /

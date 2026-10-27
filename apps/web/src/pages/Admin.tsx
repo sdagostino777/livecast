@@ -129,10 +129,23 @@ export function Admin() {
     }
   }
 
-  async function createAndStart(title: string, kind: "video" | "audio", record: boolean) {
+  /**
+   * Creating a broadcast never starts it: the operator fills title, kind and
+   * the event images, checks the result, and only presses "Vai in onda" from
+   * the list when everything is ready. Starting is one click, not a side
+   * effect of creating.
+   */
+  async function createDraft(
+    title: string,
+    kind: "video" | "audio",
+    record: boolean,
+    files: { poster?: File; icon?: File },
+  ) {
     await act(async () => {
       const created = await api.post<{ stream: StreamView }>("/api/admin/streams", { title, kind, record });
-      await api.post(`/api/admin/streams/${created.stream.id}/start`);
+      if (files.poster) await uploadStreamImage(created.stream.id, "poster", files.poster);
+      if (files.icon) await uploadStreamImage(created.stream.id, "icon", files.icon);
+      notify("Diretta creata. Premi «Vai in onda» nella lista quando sei pronto.");
     });
   }
 
@@ -343,13 +356,19 @@ export function Admin() {
                 Carica l'immagine evento: è quello che gli spettatori vedono prima di premere play.
               </p>
             )}
+            {!active && (
+              <p className="muted small">
+                Questa diretta è {current.status === "draft" ? "in bozza" : "terminata"}: premi <b>Vai in onda</b> per
+                iniziare la trasmissione.
+              </p>
+            )}
 
             {active && <ObsPanel ov={ov} />}
           </div>
         ) : (
           <div className="stack">
             <p className="muted small">Nessuna diretta attiva. Crea la prossima qui sotto.</p>
-            <NewStreamForm disabled={busy} onCreate={createAndStart} />
+            <NewStreamForm disabled={busy} onCreate={createDraft} />
           </div>
         )}
       </section>
@@ -435,45 +454,119 @@ function NewStreamForm({
   onCreate,
 }: {
   disabled: boolean;
-  onCreate: (title: string, kind: "video" | "audio", record: boolean) => Promise<void>;
+  onCreate: (
+    title: string,
+    kind: "video" | "audio",
+    record: boolean,
+    files: { poster?: File; icon?: File },
+  ) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"video" | "audio">("video");
   const [record, setRecord] = useState(false);
+  const [poster, setPoster] = useState<File | null>(null);
+  const [icon, setIcon] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const posterRef = useRef<HTMLInputElement | null>(null);
+  const iconRef = useRef<HTMLInputElement | null>(null);
+
+  function pickPoster(file: File | null) {
+    setPoster(file);
+    if (posterPreview) URL.revokeObjectURL(posterPreview);
+    setPosterPreview(file ? URL.createObjectURL(file) : null);
+  }
+  function pickIcon(file: File | null) {
+    setIcon(file);
+    if (iconPreview) URL.revokeObjectURL(iconPreview);
+    setIconPreview(file ? URL.createObjectURL(file) : null);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!title.trim()) return;
-    await onCreate(title.trim(), kind, record);
+    await onCreate(title.trim(), kind, record, {
+      ...(poster ? { poster } : {}),
+      ...(icon ? { icon } : {}),
+    });
     setTitle("");
+    setRecord(false);
+    pickPoster(null);
+    pickIcon(null);
   }
 
   return (
-    <form className="row wrap" onSubmit={submit}>
-      <input
-        className="input grow"
-        placeholder="Titolo della diretta (es. Congresso Regionale / Evento semestrale)"
-        value={title}
-        maxLength={120}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <div className="choice" role="radiogroup" aria-label="Tipo di trasmissione">
-        <label>
-          <input type="radio" name="kind" checked={kind === "video"} onChange={() => setKind("video")} />
-          Video
-        </label>
-        <label>
-          <input type="radio" name="kind" checked={kind === "audio"} onChange={() => setKind("audio")} />
-          Solo audio
+    <form className="stack" onSubmit={submit}>
+      <div className="row wrap">
+        <input
+          className="input grow"
+          placeholder="Titolo della diretta (es. Congresso Regionale / Evento semestrale)"
+          value={title}
+          maxLength={120}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <div className="choice" role="radiogroup" aria-label="Tipo di trasmissione">
+          <label>
+            <input type="radio" name="kind" checked={kind === "video"} onChange={() => setKind("video")} />
+            Video
+          </label>
+          <label>
+            <input type="radio" name="kind" checked={kind === "audio"} onChange={() => setKind("audio")} />
+            Solo audio
+          </label>
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} />
+          Registra
         </label>
       </div>
-      <label className="check">
-        <input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} />
-        Registra
-      </label>
-      <button className="btn btn-primary" type="submit" disabled={disabled || !title.trim()}>
-        Crea e vai in onda
-      </button>
+
+      <div className="row wrap" style={{ alignItems: "flex-end" }}>
+        <div className="stack" style={{ gap: 8, flex: 1, minWidth: 220 }}>
+          <span className="small muted">Immagine evento (16:9) — visibile prima del play</span>
+          {posterPreview ? (
+            <img className="thumb poster-thumb" src={posterPreview} alt="Anteprima poster" style={{ width: 160, height: 90 }} />
+          ) : (
+            <span className="thumb poster-thumb placeholder" aria-hidden style={{ width: 160, height: 90 }} />
+          )}
+          <input
+            ref={posterRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            hidden
+            onChange={(event) => pickPoster(event.target.files?.[0] ?? null)}
+          />
+          <button className="btn btn-ghost btn-small" type="button" onClick={() => posterRef.current?.click()}>
+            {poster ? "Cambia immagine" : "Scegli immagine"}
+          </button>
+        </div>
+
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="small muted">Icona (quadrata) — elenchi</span>
+          {iconPreview ? (
+            <img className="thumb icon-thumb" src={iconPreview} alt="Anteprima icona" />
+          ) : (
+            <span className="thumb icon-thumb placeholder" aria-hidden />
+          )}
+          <input
+            ref={iconRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            hidden
+            onChange={(event) => pickIcon(event.target.files?.[0] ?? null)}
+          />
+          <button className="btn btn-ghost btn-small" type="button" onClick={() => iconRef.current?.click()}>
+            {icon ? "Cambia icona" : "Scegli icona"}
+          </button>
+        </div>
+
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="small muted">Le immagini sono opzionali ora, modificabili dopo</span>
+          <button className="btn btn-primary" type="submit" disabled={disabled || !title.trim()}>
+            Crea
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

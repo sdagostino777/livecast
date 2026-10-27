@@ -7,9 +7,11 @@ to get wrong: attaching a CDN, and verifying the encoder.
 
 1. `systemctl status livecast livecast-mediamtx` — both `active (running)`.
 2. Open `https://<domain>/admin` and log in.
-3. Create the broadcast ("Crea e vai in onda"), choosing **Video** or **Solo audio**.
-   Status becomes **In attesa di OBS**. An audio-only broadcast ignores any video
-   OBS sends, so the operator can leave the scene as it is.
+3. Create the broadcast ("Crea"), choosing **Video** or **Solo audio** and the
+   event images. It appears in **Dirette** as a draft.
+4. Press **Vai in onda** on that row: status becomes **In attesa di OBS**. An
+   audio-only broadcast ignores any video OBS sends, so the operator can leave
+   the scene as it is.
 4. In OBS, start streaming. The panel flips to **In onda** within ~5 s.
 5. Open the `/live/<slug>` link on a phone over mobile data, press play, and
    confirm the **LIVE** badge. This is the only test that matters.
