@@ -26,7 +26,21 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/ndx_vps}"
 APP_DIR="/srv/ndx-live/app"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:4100/api/health}"
 SSH="ssh -i ${SSH_KEY} -o BatchMode=yes -o ServerAliveInterval=30 -o ConnectTimeout=15"
-SCP_SYNC="rsync -az --delete"
+
+# macOS ships openrsync at /usr/bin/rsync, which rejects this script's options
+# ("hostname contains invalid characters"). Prefer a real GNU rsync — Homebrew's
+# or Linux's — and fall back to tar over ssh when only openrsync exists. The
+# tar fallback cannot delete files removed from the repo; that is the documented
+# trade for not depending on a package manager.
+RSYNC_BIN="$(command -v rsync || true)"
+if [ -x "/opt/homebrew/bin/rsync" ] && "/opt/homebrew/bin/rsync" --version | grep -q "version 3\."; then
+  RSYNC_BIN="/opt/homebrew/bin/rsync"
+fi
+if [ -n "${RSYNC_BIN}" ] && "${RSYNC_BIN}" --version 2>/dev/null | grep -q "GNU rsync"; then
+  SYNC_MODE="rsync"
+else
+  SYNC_MODE="tar"
+fi
 
 PROVISION=0
 ALLOW_DIRTY=0
@@ -55,13 +69,19 @@ log "Syncing source to ${SSH_HOST}:${APP_DIR}"
 ${SSH} "mkdir -p ${APP_DIR}"
 # .env, data and node_modules are server state, never local state:
 # `--delete` would otherwise wipe the production credentials and the database.
-${SCP_SYNC} \
-  --exclude node_modules --exclude dist --exclude .git \
-  --exclude .env --exclude data --exclude coverage --exclude "*.log" \
-  -e "ssh -i ${SSH_KEY} -o BatchMode=yes" \
-  ./ "${SSH_HOST}:${APP_DIR}/"
+EXCLUDES=(--exclude node_modules --exclude dist --exclude .git --exclude .env
+  --exclude data --exclude coverage --exclude "*.log" --exclude .DS_Store)
+if [ "${SYNC_MODE}" = "rsync" ]; then
+  "${RSYNC_BIN}" -az --delete "${EXCLUDES[@]}" \
+    -e "ssh -i ${SSH_KEY} -o BatchMode=yes" \
+    ./ "${SSH_HOST}:${APP_DIR}/"
+else
+  log "GNU rsync not found — syncing with tar (removed files are not deleted remotely)"
+  tar -czf - "${EXCLUDES[@]}" . \
+    | ${SSH} "mkdir -p ${APP_DIR} && tar -xzf - -C ${APP_DIR}"
+fi
 ${SSH} "chown -R ndxlive:ndxlive ${APP_DIR} && chmod -R g+w ${APP_DIR}"
-log "source synced"
+log "source synced (${SYNC_MODE})"
 
 # --- 3. First-install provisioning (optional) -------------------------------
 
