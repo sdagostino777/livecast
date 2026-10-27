@@ -387,17 +387,14 @@ export function Admin() {
             </div>
           )}
           <div className="regia-actions">
-            <div className="row">
-              <button
-                className="btn btn-online"
-                disabled={busy || onAir || !(pubKind !== null || ov?.ingest.ready) || !current}
-                onClick={() => void startStream()}
-                title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
-              >
-                {busy && !onAir ? <span className="spinner-xs" aria-hidden /> : "●"} ONLINE
-              </button>
-              <span className={`blink-dot${onAir ? "" : " hidden"}`} aria-hidden />
-            </div>
+            <button
+              className="btn btn-online"
+              disabled={busy || onAir || !(pubKind !== null || ov?.ingest.ready) || !current}
+              onClick={() => void startStream()}
+              title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
+            >
+              {busy && !onAir ? <span className="spinner-xs" aria-hidden /> : "●"} ONLINE
+            </button>
             <button className="btn btn-stop" disabled={busy || !onAir} onClick={() => void stopStream()} title="Ferma la diretta">
               ■ STOP
             </button>
