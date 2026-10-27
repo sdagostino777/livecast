@@ -929,7 +929,7 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
           </em>
         </label>
         <label className="field">
-          <span className="row">{led(checks?.ingestTcp ?? null)} Host ingest OBS</span>
+          <span className="row">{led(checks?.ingestTcp ?? null)} Host ingest</span>
           <input className="input" value={form.ingestHost} onChange={(e) => setField("ingestHost", e.target.value)} />
           <em className="muted">Può differire dal dominio pubblico (es. IP del VPS). Il LED verifica la porta RTMP.</em>
         </label>
