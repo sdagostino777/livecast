@@ -82,23 +82,31 @@
         <li>The Livecast repository, and five minutes for the initial install.</li>
       </ul>
 
-      <h3>Install (once, from a terminal)</h3>
+      <h3>1. Download it (once)</h3>
+      <p class="small">On GitHub: green <b>Code → Download ZIP</b> (fine from a phone too — upload the ZIP to the
+      server). From a terminal:</p>
       <div class="box">
-        <p class="mono">git clone https://github.com/sdagostino777/livecast.git</p>
-        <p class="mono">cd livecast &amp;&amp; cp .deploy.env.example .deploy.env</p>
-        <p class="small">Fill in <span class="mono">.deploy.env</span> with your server address, then:</p>
-        <p class="mono">APP_DOMAIN=live.yourdomain.com bash infra/scripts/deploy.sh --provision</p>
+        <p class="mono">curl -L https://github.com/sdagostino777/livecast/archive/refs/heads/main.tar.gz -o livecast.tgz</p>
+        <p class="mono">tar xzf livecast.tgz &amp;&amp; cd livecast-main</p>
+      </div>
+
+      <h3>2. One command installs everything</h3>
+      <p class="small">In your server's terminal (Hostinger → VPS → <b>Terminal</b>, as root), inside the folder you
+      just unpacked, type:</p>
+      <div class="box">
+        <p class="mono">bash install.sh live.yourdomain.com</p>
       </div>
       <p class="small">
-        The script installs everything: the media server (MediaMTX), the encoder (FFmpeg), the services that restart
-        themselves after a failure, nginx, the free HTTPS certificate, and the <b>admin</b> account. It prints the
-        admin password once: <b>store it somewhere safe</b>.
+        It installs the media server, the encoder, the services that restart themselves after a failure, free HTTPS,
+        the firewall and the <b>admin</b> account. Nothing else: OBS is not mandatory and no file needs editing by
+        hand.
       </p>
 
       <div class="box warn">
         <p class="small">
-          <b>Right after install</b>, open <span class="mono">https://live.yourdomain.com/admin</span>, sign in as
-          <span class="mono">admin</span> and change the password immediately (gear → Sicurezza).
+          <b>3. First login:</b> open <span class="mono">https://live.yourdomain.com/admin</span>, user
+          <b>admin</b>, password <b>Admin</b>. The panel <b>forces you to change it immediately</b>: pick at least 12
+          characters and you are in.
         </p>
       </div>
       <div class="footer"><span>Livecast — quick guide</span><span>2 / 7</span></div>
@@ -134,7 +142,15 @@
     </div>
 
     <div class="page">
-      <h2>4. Going live with OBS</h2>
+      <h2>4. Going live</h2>
+      <div class="box">
+        <p class="small">
+          <b>Two ways, no mandatory software.</b> In the panel, under the broadcast, you find
+          <b>Pubblica da camera</b> and <b>Condividi schermo</b>: the browser transmits directly. The page must stay
+          open during the broadcast — reloading it stops the transmission. For long events OBS is the safer choice
+          (it reconnects by itself): here is how to configure it.
+        </p>
+      </div>
       <p>
         In the panel press <b>Mostra credenziali</b> (show credentials) and copy the full server URL. In OBS →
         <b>Settings → Stream</b>:

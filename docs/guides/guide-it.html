@@ -280,23 +280,30 @@
         <li>Il repository Livecast e 5 minuti per l'installazione iniziale.</li>
       </ul>
 
-      <h3>Installazione (una volta sola, da terminale)</h3>
+      <h3>1. Scarica il programma (una volta sola)</h3>
+      <p class="small">Da GitHub: pulsante verde <b>Code → Download ZIP</b> (va bene anche da telefono, poi carichi lo
+      ZIP sul server). Da terminale:</p>
       <div class="box">
-        <p class="mono">git clone https://github.com/sdagostino777/livecast.git</p>
-        <p class="mono">cd livecast &amp;&amp; cp .deploy.env.example .deploy.env</p>
-        <p class="small">Scrivi dentro <span class="mono">.deploy.env</span> l'indirizzo del tuo server, poi:</p>
-        <p class="mono">APP_DOMAIN=live.tuodominio.it bash infra/scripts/deploy.sh --provision</p>
+        <p class="mono">curl -L https://github.com/sdagostino777/livecast/archive/refs/heads/main.tar.gz -o livecast.tgz</p>
+        <p class="mono">tar xzf livecast.tgz &amp;&amp; cd livecast-main</p>
+      </div>
+
+      <h3>2. Un solo comando installa tutto</h3>
+      <p class="small">Nel terminale del tuo server (Hostinger → VPS → <b>Terminale</b>, come root), dentro la cartella
+      appena scompattata, scrivi:</p>
+      <div class="box">
+        <p class="mono">bash install.sh live.tuodominio.it</p>
       </div>
       <p class="small">
-        Lo script installa tutto: server video (MediaMTX), encoder (FFmpeg), i servizi che riavviano da soli dopo un
-        guasto, nginx, il certificato HTTPS gratuito e l'utente <b>admin</b>. Alla fine stampa la password di admin:
-        <b>conservala in un posto sicuro</b>.
+        Installa da solo server video, encoder, i servizi che si riavviano dopo un guasto, HTTPS gratuito, firewall e
+        l'utente <b>admin</b>. Non serve altro: niente OBS obbligatorio, niente file da modificare a mano.
       </p>
 
       <div class="box warn">
         <p class="small">
-          <b>Dopo l'installazione</b> apri <span class="mono">https://live.tuodominio.it/admin</span>, accedi con
-          <span class="mono">admin</span> e cambia subito la password (ingranaggio → Sicurezza).
+          <b>3. Primo accesso:</b> apri <span class="mono">https://live.tuodominio.it/admin</span>, utente
+          <b>admin</b>, password <b>Admin</b>. Il pannello <b>ti obbliga a cambiarla subito</b>: scegline una di almeno
+          12 caratteri e sei dentro.
         </p>
       </div>
       <div class="footer"><span>Livecast — guida rapida</span><span>2 / 7</span></div>
