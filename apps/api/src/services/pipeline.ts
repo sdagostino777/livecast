@@ -502,8 +502,7 @@ export class HlsPipeline implements PipelineApi {
 
     child.on("exit", (code, signal) => {
       meta.ffmpeg = null;
-      if (meta.stopping) {
-        this.finishEnded();
+      if (meta.stopping || this.meta !== meta) {
         return;
       }
       meta.callbacks.onLog?.(`ffmpeg exited (code=${code ?? "?"}, signal=${signal ?? "?"})`);
@@ -600,7 +599,7 @@ export class HlsPipeline implements PipelineApi {
 
   private finish(reason: "stopped" | "ingest_timeout" | "fatal"): void {
     const meta = this.meta;
-    if (!meta) return;
+    if (!meta || meta.stopping) return;
     // Record the reason before any exit handler can run: the FFmpeg exit handler
     // calls finishEnded() synchronously for an already-dead child.
     this.endedReason = reason;
@@ -610,18 +609,35 @@ export class HlsPipeline implements PipelineApi {
     if (meta.ingestTimer) clearTimeout(meta.ingestTimer);
     meta.monitorTimer = meta.retryTimer = meta.ingestTimer = null;
 
+    // STOP is immediate from the panel's point of view: the state flips here,
+    // the directory is removed here, and the callback fires here. Waiting for
+    // FFmpeg to acknowledge a signal left the panel showing "In onda" while the
+    // link was already offline.
+    this.state = "ended";
     const child = meta.ffmpeg;
     if (child) {
-      child.kill("SIGINT");
+      try {
+        child.kill("SIGINT");
+      } catch {
+        /* already gone */
+      }
       const force = setTimeout(() => {
         try {
           child.kill("SIGKILL");
         } catch {
           /* already gone */
         }
-      }, 5000);
+      }, 4000);
       force.unref?.();
     }
+    try {
+      fs.rmSync(meta.opts.outDir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+    const finishedMeta = meta;
+    this.meta = null;
+    finishedMeta.callbacks.onEnded(reason);
     // If FFmpeg has already exited, the exit handler called finishEnded. If it is
     // alive, it will exit shortly and call it there. Guard against a crash-loop
     // with no child: end immediately.
