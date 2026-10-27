@@ -61,6 +61,9 @@ fi
 # The app directory is owned by the service user but written by root at deploy
 # time (rsync), so it also needs group write: root:livecast with 775.
 install -d -o "${APP_USER}" -g "${APP_USER}" -m 775 "${APP_DIR}" "${APP_DIR}/bin" "${APP_DIR}/data" "${APP_DIR}/data/hls" "${APP_DIR}/data/recordings"
+# The panel shows the service journal (encoder stderr included), which needs the
+# journal group; without it the viewer falls back to the in-process buffer.
+usermod -aG systemd-journal "${APP_USER}" 2>/dev/null || true
 ok "directories under ${APP_DIR}"
 
 # --- 2. Credentials (generated once) --------------------------------------
