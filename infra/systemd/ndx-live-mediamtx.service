@@ -1,0 +1,19 @@
+[Unit]
+Description=NDX Live — MediaMTX RTMP ingest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ndxlive
+Group=ndxlive
+ExecStart=/srv/ndx-live/bin/mediamtx /srv/ndx-live/mediamtx.yml
+Restart=always
+RestartSec=2
+# A broadcaster reconnect burst opens many short-lived connections; the default
+# fd limit is generous enough but explicit is easier to reason about in an
+# incident.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

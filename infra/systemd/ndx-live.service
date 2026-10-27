@@ -1,0 +1,20 @@
+[Unit]
+Description=NDX Live — API and player
+After=network-online.target ndx-live-mediamtx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ndxlive
+Group=ndxlive
+WorkingDirectory=/srv/ndx-live/app
+EnvironmentFile=/srv/ndx-live/app/.env
+ExecStart=__NODE__ apps/api/dist/main.js
+# Never leave the panel and the player down after a crash or an OOM: the one
+# thing worse than a stalled encoder is a web app that cannot be asked about it.
+Restart=always
+RestartSec=2
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
