@@ -1,14 +1,10 @@
 name: ci
 
 on:
-  # Runs on code. Documentation, screenshots and PDFs do not need a build:
-  # every docs commit used to start two jobs and notify the owner.
-  push:
-    branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - "LICENSE"
+  # Direct pushes to main no longer start a build: on a single-maintainer repo
+  # that produced a notification per commit for the owner and nobody else.
+  # Pull requests still run the suite, and the workflow can be started by hand
+  # from the Actions tab whenever a push deserves a check.
   pull_request:
     paths-ignore:
       - "docs/**"
