@@ -34,7 +34,7 @@ function kindLabel(kind: "video" | "audio"): string {
 function statusLabel(ov: Overview | null): string {
   if (!ov) return "…";
   if (!ov.stream) return "Offline";
-  if (ov.stream.status === "starting") return ov.ingest.ready ? "Preparazione…" : "In attesa di OBS";
+  if (ov.stream.status === "starting") return ov.ingest.ready ? "Preparazione…" : "In attesa del segnale";
   if (ov.stream.status === "live") return "In onda";
   return "Terminata";
 }
@@ -372,8 +372,26 @@ export function Admin() {
         {current ? (
           <div className="stack">
             <div className="row-between">
-              <div className="row" style={{ alignItems: "flex-start" }}>
+              <div className="row" style={{ alignItems: "center", gap: 16 }}>
                 <img className="thumb poster-thumb" src={posterSrc(current)} alt="" />
+                <div className="stack" style={{ gap: 8 }}>
+                  <button
+                    className="btn btn-online"
+                    disabled={busy || Boolean(active)}
+                    onClick={() => void startStream(current.id)}
+                    title="Manda in onda"
+                  >
+                    ● ONLINE
+                  </button>
+                  <button
+                    className="btn btn-stop"
+                    disabled={busy || !active}
+                    onClick={() => void stopStream(current.id)}
+                    title="Ferma la diretta"
+                  >
+                    ■ STOP
+                  </button>
+                </div>
                 <div>
                   {editingTitle ? (
                     <form
@@ -408,12 +426,18 @@ export function Admin() {
                 </div>
               </div>
               <div className="row wrap">
-                <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => pickPoster(current.id)}>
+                <button
+                  className="btn btn-ghost btn-small"
+                  disabled={busy || Boolean(active)}
+                  title={active ? "In onda: l'immagine non è modificabile" : undefined}
+                  onClick={() => pickPoster(current.id)}
+                >
                   {current.posterUrl ? "Cambia immagine" : "Carica immagine"}
                 </button>
                 <button
                   className="btn btn-ghost btn-small"
-                  disabled={busy}
+                  disabled={busy || Boolean(active)}
+                  title={active ? "In onda: il titolo non è modificabile" : undefined}
                   onClick={() => {
                     setTitleDraft(current.title);
                     setEditingTitle(true);
@@ -429,24 +453,15 @@ export function Admin() {
                     Copia link
                   </button>
                 )}
-                {active ? (
-                  <button className="btn btn-danger btn-small" disabled={busy} onClick={() => void stopStream(active.id)}>
-                    Termina
-                  </button>
-                ) : (
-                  <button className="btn btn-primary btn-small" disabled={busy} onClick={() => void startStream(current.id)}>
-                    Vai in onda
-                  </button>
-                )}
               </div>
             </div>
 
             <div className="obs">
               <p className="small" style={{ margin: 0 }}>
-                <b>Collega la camera o lo schermo</b> (senza OBS): qui vedi l'anteprima e il collegamento al server,
-                ma <b>nessuno spettatore ti vede</b> finché non premi <b>Vai in onda</b>. La pagina deve restare aperta
-                durante la trasmissione — se la ricarichi o la chiudi, la diretta si interrompe. Per eventi lunghi
-                conviene OBS, che riconnette da solo.
+                <b>Collega la camera o lo schermo</b>: qui vedi l'anteprima e il collegamento al server, ma
+                <b>nessuno spettatore ti vede</b> finché non premi <b>● ONLINE</b>. La pagina deve restare aperta
+                durante la trasmissione — se la ricarichi o la chiudi, la diretta si interrompe. Per eventi lunghi è
+                più stabile un programma di trasmissione esterno, che riconnette da solo.
               </p>
               {pubKind === null ? (
                 <div className="row wrap">
@@ -476,7 +491,7 @@ export function Admin() {
                       </>
                     ) : (
                       <>
-                        <b>anteprima</b>: gli spettatori non ti vedono ancora. Premi <b>Vai in onda</b> quando sei
+                        <b>anteprima</b>: gli spettatori non ti vedono ancora. Premi <b>● ONLINE</b> quando sei
                         pronto (e non ricaricare questa pagina).
                       </>
                     )}
@@ -557,7 +572,11 @@ export function Admin() {
                   </td>
                   <td className="muted small">{formatDate(s.createdAt)}</td>
                   <td className="cell-actions">
-                    <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => pickPoster(s.id)}>
+                    <button
+                      className="btn btn-ghost btn-small"
+                      disabled={busy || s.status === "live" || s.status === "starting"}
+                      onClick={() => pickPoster(s.id)}
+                    >
                       Immagine
                     </button>
                     {!active && (s.status === "draft" || s.status === "ended") && (
@@ -749,14 +768,15 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
       </p>
 
       <p className="small">
-        In OBS: <b>Server</b> = l'URL completo con credenziali (pulsante sotto), <b>Stream Key</b> vuota.
+        Da un programma esterno: incolla l'<b>URL completo</b> (pulsante sotto) nel campo Server / Indirizzo e lascia
+        vuota la chiave di trasmissione.
       </p>
       <p className="muted small mono ellipsis">Principale: {ov.ingest.server}</p>
       <p className="muted small mono ellipsis">Backup: {ov.ingest.backupServer}</p>
 
       {revealed ? (
         <>
-          <p className="muted small">URL completo con credenziali — principale (per OBS):</p>
+          <p className="muted small">URL completo con credenziali — principale (encoder esterno):</p>
           <div className="code-row">
             <code className="code">{revealed.server}</code>
             <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.server)}>
@@ -765,7 +785,7 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
           </div>
           {revealed.backupServer && (
             <>
-              <p className="muted small">Backup (per il secondo encoder, se lo usi):</p>
+              <p className="muted small">Backup (per un secondo encoder, se lo usi):</p>
               <div className="code-row">
                 <code className="code">{revealed.backupServer}</code>
                 <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.backupServer!)}>

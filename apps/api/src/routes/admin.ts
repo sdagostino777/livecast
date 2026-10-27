@@ -349,9 +349,19 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!params.ok || !body.ok) return reply.code(400).send({ error: "invalid_request" });
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
-    // The title can change at any time (it is a label, not a promise); the kind
-    // and the recording flag decide what the encoder does, so only a draft may
-    // change them.
+    // Once a broadcast is on air its identity is frozen: the title and the
+    // artwork are what the audience is looking at, and editors flipping them
+    // mid-transmission is how a live event ends up mislabelled. Editing is
+    // allowed while it is a draft or after it ended.
+    const onAir = stream.status === "starting" || stream.status === "live";
+    if (onAir && body.data.title !== undefined) {
+      return reply.code(409).send({ error: "stream_on_air" });
+    }
+    if (onAir && body.data.posterPalette !== undefined) {
+      return reply.code(409).send({ error: "stream_on_air" });
+    }
+    // The kind and the recording flag decide what the encoder does, so only a
+    // draft may change them.
     if (stream.status !== "draft" && (body.data.kind !== undefined || body.data.record !== undefined)) {
       return reply.code(409).send({ error: "stream_not_editable" });
     }
@@ -554,6 +564,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
+    if (stream.status === "starting" || stream.status === "live") {
+      return reply.code(409).send({ error: "stream_on_air" });
+    }
 
     const body = req.body;
     if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: "expected_image_bytes" });
@@ -599,6 +612,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
       const stream = getStreamById(app.db, params.data.id);
       if (!stream) return reply.code(404).send({ error: "not_found" });
+      if (stream.status === "starting" || stream.status === "live") {
+        return reply.code(409).send({ error: "stream_on_air" });
+      }
       const ext = kind === "poster" ? stream.poster_ext : stream.icon_ext;
       if (ext) {
         try {

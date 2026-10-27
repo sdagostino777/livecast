@@ -1113,6 +1113,36 @@ h2 {
   background: var(--surface-2);
 }
 
+.btn-online,
+.btn-stop {
+  min-width: 132px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  color: #fff;
+  border: 0;
+}
+
+.btn-online {
+  background: #2f9e44;
+}
+
+.btn-online:hover:not(:disabled) {
+  background: #28873a;
+}
+
+.btn-stop {
+  background: #c92a2a;
+}
+
+.btn-stop:hover:not(:disabled) {
+  background: #ab2020;
+}
+
+.btn-online:disabled,
+.btn-stop:disabled {
+  opacity: 0.45;
+}
+
 .swatch {
   width: 54px;
   height: 34px;
