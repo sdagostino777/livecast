@@ -467,6 +467,79 @@ describe("admin + public stream lifecycle", () => {
     expect(anon.statusCode).toBe(401);
   });
 
+  it("accepts a poster upload, serves it, and removes it", async () => {
+    const cookie = await login();
+    const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Evento con poster" } });
+    const stream = created.json().stream;
+
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const uploaded = await app.inject({
+      method: "POST",
+      url: `/api/admin/streams/${stream.id}/poster`,
+      headers: { cookie, "content-type": "image/png" },
+      payload: png,
+    });
+    expect(uploaded.statusCode).toBe(200);
+    expect(uploaded.json().stream.posterUrl).toBe(`/uploads/${stream.slug}.poster.png`);
+
+    const served = await app.inject({ method: "GET", url: uploaded.json().stream.posterUrl });
+    expect(served.statusCode).toBe(200);
+
+    const bogus = await app.inject({
+      method: "POST",
+      url: `/api/admin/streams/${stream.id}/poster`,
+      headers: { cookie, "content-type": "image/png" },
+      payload: Buffer.from("not an image at all"),
+    });
+    expect(bogus.statusCode).toBe(400);
+    expect(bogus.json().error).toBe("unsupported_image_format");
+
+    const anonymous = await app.inject({
+      method: "POST",
+      url: `/api/admin/streams/${stream.id}/icon`,
+      headers: { "content-type": "image/png" },
+      payload: png,
+    });
+    expect(anonymous.statusCode).toBe(401);
+
+    const removed = await app.inject({ method: "DELETE", url: `/api/admin/streams/${stream.id}/poster`, headers: { cookie } });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json().stream.posterUrl).toBeNull();
+  });
+
+  it("allows a title change at any time, but not the kind once live", async () => {
+    const cookie = await login();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie },
+      payload: { title: "Congresso Regionale", kind: "video" },
+    });
+    const stream = created.json().stream;
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { title: "Congresso Regionale 2027" },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().stream.title).toBe("Congresso Regionale 2027");
+
+    const kindChange = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { kind: "audio" },
+    });
+    expect(kindChange.statusCode).toBe(409);
+
+    const livePage = await app.inject({ method: "GET", url: `/api/live/${stream.slug}` });
+    expect(livePage.json().title).toBe("Congresso Regionale 2027");
+  });
+
   it("rejects unknown and malformed stream slugs", async () => {
     expect((await app.inject({ method: "GET", url: "/api/live/aaaaaaaaaa" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/live/NOT-A-SLUG" })).statusCode).toBe(404);

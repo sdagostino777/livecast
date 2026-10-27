@@ -79,6 +79,10 @@ export function recordingsDir(): string {
   return path.join(config.dataDir, "recordings");
 }
 
+export function uploadsDir(): string {
+  return path.join(config.dataDir, "uploads");
+}
+
 export function dbFile(): string {
   return path.join(config.dataDir, "database.sqlite");
 }

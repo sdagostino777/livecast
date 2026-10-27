@@ -35,6 +35,8 @@ export const api = {
     request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) }),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body === undefined ? undefined : JSON.stringify(body) }),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "PATCH", body: body === undefined ? undefined : JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -57,6 +59,8 @@ export interface StreamView {
   title: string;
   status: "draft" | "starting" | "live" | "ended";
   kind: "video" | "audio";
+  posterUrl: string | null;
+  iconUrl: string | null;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -111,6 +115,8 @@ export interface LiveMeta {
   title: string;
   status: "starting" | "live" | "ended";
   kind: "video" | "audio";
+  posterUrl: string | null;
+  iconUrl: string | null;
   startedAt: string | null;
   endedAt: string | null;
   hlsUrl: string;
@@ -130,4 +136,29 @@ export interface Checks {
   ingestTcp: boolean;
   cdnEnabled: boolean;
   pipeline: string;
+}
+
+/** Uploads a File's raw bytes; the server sniffs the format by magic bytes. */
+export async function uploadStreamImage(
+  streamId: string,
+  kind: "poster" | "icon",
+  file: File,
+): Promise<StreamView> {
+  const type = file.type || (file.name.endsWith(".png") ? "image/png" : file.name.endsWith(".webp") ? "image/webp" : "image/jpeg");
+  const res = await fetch(`/api/admin/streams/${streamId}/${kind}`, {
+    method: "POST",
+    body: file,
+    credentials: "same-origin",
+    headers: { "content-type": type },
+  });
+  if (!res.ok) {
+    let body: { error?: string } = {};
+    try {
+      body = (await res.json()) as { error?: string };
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`);
+  }
+  return ((await res.json()) as { stream: StreamView }).stream;
 }

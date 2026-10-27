@@ -14,10 +14,12 @@
  *   POST   /api/admin/totp/setup|enable|disable
  *   GET    /api/admin/audit               recent privileged actions
  */
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import { config, hlsDir, recordingsDir } from "../config.js";
+import fs from "node:fs";
+import path from "node:path";
+import { config, hlsDir, recordingsDir, uploadsDir } from "../config.js";
 import { audit } from "../db.js";
 import {
   MIN_PASSWORD_LENGTH,
@@ -60,6 +62,7 @@ const ResetPasswordBody = z.object({
 
 const PatchStreamBody = z.object({
   title: z.string().trim().min(1).max(120).optional(),
+  kind: z.enum(["video", "audio"]).optional(),
   record: z.boolean().optional(),
 });
 
@@ -81,6 +84,15 @@ const IdParams = z.object({ id: z.string().min(1).max(64) });
 function safeParse<T>(schema: z.ZodType<T>, value: unknown): { ok: true; data: T } | { ok: false } {
   const parsed = schema.safeParse(value);
   return parsed.success ? { ok: true, data: parsed.data } : { ok: false };
+}
+
+/** Returns the extension for the three formats the panel accepts, or null. */
+function imageExtension(buf: Buffer): "jpg" | "png" | "webp" | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg";
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "png";
+  if (buf.subarray(0, 4).toString("latin1") === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP") return "webp";
+  return null;
 }
 
 interface ProbeResult {
@@ -322,9 +334,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!params.ok || !body.ok) return reply.code(400).send({ error: "invalid_request" });
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
-    if (stream.status !== "draft") return reply.code(409).send({ error: "stream_not_editable" });
+    // The title can change at any time (it is a label, not a promise); the kind
+    // and the recording flag decide what the encoder does, so only a draft may
+    // change them.
+    if (stream.status !== "draft" && (body.data.kind !== undefined || body.data.record !== undefined)) {
+      return reply.code(409).send({ error: "stream_not_editable" });
+    }
     if (body.data.title !== undefined) {
       app.db.prepare("UPDATE streams SET title = ? WHERE id = ?").run(body.data.title, stream.id);
+    }
+    if (body.data.kind !== undefined) {
+      app.db.prepare("UPDATE streams SET kind = ? WHERE id = ?").run(body.data.kind, stream.id);
     }
     if (body.data.record !== undefined) {
       app.db.prepare("UPDATE streams SET record = ? WHERE id = ?").run(body.data.record ? 1 : 0, stream.id);
@@ -471,6 +491,79 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     audit(app.db, { userId: user.id, username: user.username, action: "password_changed", ip: req.ip });
     return { ok: true };
   });
+
+  // --- event images (poster before playback, square icon in lists) ----------
+  async function uploadImage(req: FastifyRequest, reply: FastifyReply, kind: "poster" | "icon") {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const params = safeParse(IdParams, req.params);
+    if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
+    const stream = getStreamById(app.db, params.data.id);
+    if (!stream) return reply.code(404).send({ error: "not_found" });
+
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: "expected_image_bytes" });
+    if (body.length > 6 * 1024 * 1024) return reply.code(413).send({ error: "image_too_large" });
+    const ext = imageExtension(body);
+    if (!ext) return reply.code(400).send({ error: "unsupported_image_format" });
+
+    const dir = uploadsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    for (const old of ["jpg", "png", "webp"]) {
+      if (old !== ext) {
+        try {
+          fs.unlinkSync(path.join(dir, `${stream.slug}.${kind}.${old}`));
+        } catch {
+          /* not present */
+        }
+      }
+    }
+    fs.writeFileSync(path.join(dir, `${stream.slug}.${kind}.${ext}`), body);
+    app.db.prepare(`UPDATE streams SET ${kind}_ext = ? WHERE id = ?`).run(ext, stream.id);
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: `${kind}_uploaded`,
+      detail: `${stream.slug}.${ext}`,
+      ip: req.ip,
+    });
+    return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
+  }
+
+  app.post("/api/admin/streams/:id/poster", { bodyLimit: 6 * 1024 * 1024 }, (req, reply) =>
+    uploadImage(req, reply, "poster"),
+  );
+  app.post("/api/admin/streams/:id/icon", { bodyLimit: 6 * 1024 * 1024 }, (req, reply) =>
+    uploadImage(req, reply, "icon"),
+  );
+
+  for (const kind of ["poster", "icon"] as const) {
+    app.delete(`/api/admin/streams/:id/${kind}`, async (req, reply) => {
+      const session = requireSession(app.db, req, reply);
+      if (!session) return reply;
+      const params = safeParse(IdParams, req.params);
+      if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
+      const stream = getStreamById(app.db, params.data.id);
+      if (!stream) return reply.code(404).send({ error: "not_found" });
+      const ext = kind === "poster" ? stream.poster_ext : stream.icon_ext;
+      if (ext) {
+        try {
+          fs.unlinkSync(path.join(uploadsDir(), `${stream.slug}.${kind}.${ext}`));
+        } catch {
+          /* already gone */
+        }
+      }
+      app.db.prepare(`UPDATE streams SET ${kind}_ext = NULL WHERE id = ?`).run(stream.id);
+      audit(app.db, {
+        userId: session.user.id,
+        username: session.user.username,
+        action: `${kind}_removed`,
+        detail: stream.slug,
+        ip: req.ip,
+      });
+      return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
+    });
+  }
 
   // --- users ---------------------------------------------------------------
   // Only the admin role manages accounts, and the admin account itself is out

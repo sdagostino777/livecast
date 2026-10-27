@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, CdnTestResult, Checks, Me, Overview, PublicUser, Settings, StreamView } from "../api";
+import { api, ApiError, Checks, Me, Overview, Settings, StreamView, uploadStreamImage } from "../api";
 import { useBrand } from "../brand";
 import { BrandMark } from "../components/BrandMark";
 import { copyToClipboard, formatDate, formatTime, navigate } from "../router";
@@ -15,6 +15,8 @@ function friendlyError(err: unknown): string {
         return "Elemento non trovato.";
       case 409:
         return "Operazione non possibile: c'è già una diretta attiva.";
+      case 413:
+        return "Immagine troppo grande (max 6 MB).";
       case 429:
         return "Troppi tentativi. Attendi un minuto.";
       default:
@@ -36,15 +38,27 @@ function statusLabel(ov: Overview | null): string {
   return "Terminata";
 }
 
+function initials(name: string): string {
+  return name
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
 export function Admin() {
   const brand = useBrand();
   const [me, setMe] = useState<Me["user"] | null>(null);
   const [ov, setOv] = useState<Overview | null>(null);
   const [streams, setStreams] = useState<StreamView[]>([]);
-  const [users, setUsers] = useState<PublicUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const posterInput = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   const notify = useCallback((message: string) => {
@@ -53,7 +67,7 @@ export function Admin() {
     toastTimer.current = window.setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const refresh = useCallback(async (role?: "admin" | "operator") => {
+  const refresh = useCallback(async () => {
     try {
       const [overview, streamList] = await Promise.all([
         api.get<Overview>("/api/admin/overview"),
@@ -62,10 +76,6 @@ export function Admin() {
       setOv(overview);
       setStreams(streamList.streams);
       setError(null);
-      if (role === "admin") {
-        const userList = await api.get<{ users: PublicUser[] }>("/api/admin/users");
-        setUsers(userList.users);
-      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         navigate("/login", true);
@@ -82,7 +92,7 @@ export function Admin() {
         const who = await api.get<Me>("/api/auth/me");
         if (!alive) return;
         setMe(who.user);
-        await refresh(who.user.role);
+        await refresh();
       } catch {
         if (alive) navigate("/login", true);
       }
@@ -94,16 +104,23 @@ export function Admin() {
 
   useEffect(() => {
     if (!me) return;
-    const timer = window.setInterval(() => void refresh(me.role), 5000);
+    const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [me, refresh]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menuOpen]);
 
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     setError(null);
     try {
       await fn();
-      await refresh(me?.role);
+      await refresh();
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -139,6 +156,21 @@ export function Admin() {
     });
   }
 
+  async function patchTitle(streamId: string, title: string) {
+    await act(async () => {
+      await api.patch(`/api/admin/streams/${streamId}`, { title });
+      setEditingTitle(false);
+      notify("Titolo aggiornato.");
+    });
+  }
+
+  async function uploadPoster(streamId: string, file: File) {
+    await act(async () => {
+      await uploadStreamImage(streamId, "poster", file);
+      notify("Immagine evento aggiornata.");
+    });
+  }
+
   async function logout() {
     try {
       await api.post("/api/auth/logout");
@@ -162,13 +194,34 @@ export function Admin() {
       <header className="admin-top">
         <BrandMark name={brand} />
         <div className="admin-user">
-          <span className="small">
-            {me.username}
-            {me.role === "admin" && <span className="pill" style={{ marginLeft: 8 }}>admin</span>}
-          </span>
-          <button className="btn btn-ghost btn-small" onClick={logout}>
-            Esci
+          <button
+            className="icon-btn"
+            title="Impostazioni"
+            aria-label="Impostazioni"
+            onClick={() => navigate("/admin/settings")}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="12" r="3.2" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
+            </svg>
           </button>
+
+          <div className="avatar-menu" onClick={(event) => event.stopPropagation()}>
+            <button className="avatar" onClick={() => setMenuOpen((open) => !open)} aria-label="Menu utente">
+              {initials(me.username)}
+            </button>
+            {menuOpen && (
+              <div className="menu" role="menu">
+                <div className="menu-head">
+                  <span>{me.username}</span>
+                  <span className="pill">{me.role === "admin" ? "admin" : "conduttore"}</span>
+                </div>
+                <button className="menu-item" onClick={() => void logout()}>
+                  Esci
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -184,13 +237,66 @@ export function Admin() {
         {active ? (
           <div className="stack">
             <div className="row-between">
-              <div>
-                <p className="stream-title">{active.title}</p>
-                <p className="muted small mono">
-                  {active.slug} · {kindLabel(active.kind)}
-                </p>
+              <div className="row" style={{ alignItems: "flex-start" }}>
+                {active.posterUrl && <img className="thumb poster-thumb" src={active.posterUrl} alt="" />}
+                <div>
+                  {editingTitle ? (
+                    <form
+                      className="row wrap"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void patchTitle(active.id, titleDraft);
+                      }}
+                    >
+                      <input
+                        className="input"
+                        value={titleDraft}
+                        maxLength={120}
+                        autoFocus
+                        onChange={(e) => setTitleDraft(e.target.value)}
+                      />
+                      <button className="btn btn-primary btn-small" type="submit" disabled={busy || !titleDraft.trim()}>
+                        Salva
+                      </button>
+                      <button className="btn btn-ghost btn-small" type="button" onClick={() => setEditingTitle(false)}>
+                        Annulla
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <p className="stream-title">{active.title}</p>
+                      <p className="muted small mono">
+                        {active.slug} · {kindLabel(active.kind)}
+                      </p>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="row">
+              <div className="row wrap">
+                <input
+                  ref={posterInput}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadPoster(active.id, file);
+                    event.target.value = "";
+                  }}
+                />
+                <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => posterInput.current?.click()}>
+                  {active.posterUrl ? "Cambia immagine" : "Carica immagine"}
+                </button>
+                <button
+                  className="btn btn-ghost btn-small"
+                  disabled={busy}
+                  onClick={() => {
+                    setTitleDraft(active.title);
+                    setEditingTitle(true);
+                  }}
+                >
+                  Modifica
+                </button>
                 <button
                   className="btn btn-ghost btn-small"
                   onClick={() => void copyToClipboard(active.pageUrl).then(() => notify("Link copiato."))}
@@ -228,6 +334,7 @@ export function Admin() {
           <table className="table">
             <thead>
               <tr>
+                <th aria-label="immagine" />
                 <th>Titolo</th>
                 <th>Tipo</th>
                 <th>Stato</th>
@@ -238,6 +345,15 @@ export function Admin() {
             <tbody>
               {streams.map((s) => (
                 <tr key={s.id}>
+                  <td>
+                    {s.iconUrl ? (
+                      <img className="thumb icon-thumb" src={s.iconUrl} alt="" />
+                    ) : s.posterUrl ? (
+                      <img className="thumb icon-thumb" src={s.posterUrl} alt="" />
+                    ) : (
+                      <span className="thumb icon-thumb placeholder" aria-hidden />
+                    )}
+                  </td>
                   <td>
                     <span className="stream-title small">{s.title}</span>
                     <br />
@@ -275,34 +391,7 @@ export function Admin() {
         )}
       </section>
 
-      {me.role === "admin" && (
-        <UsersPanel
-          users={users}
-          busy={busy}
-          onCreate={(username, password) =>
-            act(async () => {
-              await api.post("/api/admin/users", { username, password });
-              notify("Utente creato.");
-            })
-          }
-          onResetPassword={(id, password) =>
-            act(async () => {
-              await api.post(`/api/admin/users/${id}/password`, { password });
-              notify("Password aggiornata per l'utente.");
-            })
-          }
-          onDelete={(id) => {
-            if (!window.confirm("Eliminare questo utente?")) return;
-            void act(async () => {
-              await api.del(`/api/admin/users/${id}`);
-              notify("Utente eliminato.");
-            });
-          }}
-        />
-      )}
-
       <SettingsPanel notify={notify} />
-      <SecurityPanel notify={notify} />
     </div>
   );
 }
@@ -329,7 +418,7 @@ function NewStreamForm({
     <form className="row wrap" onSubmit={submit}>
       <input
         className="input grow"
-        placeholder="Titolo della diretta (es. Assemblea annuale)"
+        placeholder="Titolo della diretta (es. Congresso Regionale / Evento semestrale)"
         value={title}
         maxLength={120}
         onChange={(e) => setTitle(e.target.value)}
@@ -366,7 +455,7 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
     setBusy(true);
     setError(null);
     try {
-      setRevealed(await api.get<{ server: string; streamKey: string }>("/api/admin/ingest"));
+      setRevealed(await api.get<{ server: string; backupServer?: string; streamKey: string }>("/api/admin/ingest"));
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -388,8 +477,8 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
       </div>
       {!ov.ingest.reachable && <span className="muted small">(server media non raggiungibile)</span>}
       <p className="muted small">
-        In uso: <b>{ov.ingest.currentInput ? using : "—"}</b>. Se l'encoder principale si interrompe, la regia
-        ripassa da sola sul backup in pochi secondi.
+        In uso: <b>{ov.ingest.currentInput ? using : "—"}</b>. Se l'encoder principale si interrompe, la regia ripassa
+        da sola sul backup in pochi secondi.
       </p>
 
       <p className="small">
@@ -434,150 +523,11 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
   );
 }
 
-function UsersPanel({
-  users,
-  busy,
-  onCreate,
-  onResetPassword,
-  onDelete,
-}: {
-  users: PublicUser[];
-  busy: boolean;
-  onCreate: (username: string, password: string) => Promise<void>;
-  onResetPassword: (id: string, password: string) => Promise<void>;
-  onDelete: (id: string) => void;
-}) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [resetFor, setResetFor] = useState<string | null>(null);
-  const [resetPw, setResetPw] = useState("");
-
-  async function create(event: FormEvent) {
-    event.preventDefault();
-    if (!username.trim() || password.length < 12) return;
-    await onCreate(username.trim(), password);
-    setUsername("");
-    setPassword("");
-  }
-
-  async function reset(event: FormEvent, id: string) {
-    event.preventDefault();
-    if (resetPw.length < 12) return;
-    await onResetPassword(id, resetPw);
-    setResetFor(null);
-    setResetPw("");
-  }
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Utenti</h2>
-        <span className="muted small">{users.length}</span>
-      </div>
-
-      <form className="user-form" onSubmit={create}>
-        <label className="field">
-          <span>Nuovo utente</span>
-          <input
-            className="input"
-            placeholder="nome utente"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="off"
-          />
-        </label>
-        <label className="field">
-          <span>Password (min. 12)</span>
-          <input
-            className="input"
-            type="password"
-            placeholder="password iniziale"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-        </label>
-        <button className="btn btn-primary" type="submit" disabled={busy || !username.trim() || password.length < 12}>
-          Crea utente
-        </button>
-      </form>
-
-      <table className="table" style={{ marginTop: 16 }}>
-        <thead>
-          <tr>
-            <th>Utente</th>
-            <th>Ruolo</th>
-            <th>Creato</th>
-            <th aria-label="azioni" />
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) =>
-            resetFor === u.id ? (
-              <tr key={u.id}>
-                <td colSpan={4}>
-                  <form className="row wrap" onSubmit={(e) => void reset(e, u.id)}>
-                    <span className="small">
-                      Nuova password per <b>{u.username}</b>:
-                    </span>
-                    <input
-                      className="input grow"
-                      type="password"
-                      autoComplete="new-password"
-                      value={resetPw}
-                      onChange={(e) => setResetPw(e.target.value)}
-                      minLength={12}
-                      required
-                    />
-                    <button className="btn btn-primary btn-small" type="submit" disabled={busy || resetPw.length < 12}>
-                      Salva
-                    </button>
-                    <button className="btn btn-ghost btn-small" type="button" onClick={() => setResetFor(null)}>
-                      Annulla
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ) : (
-              <tr key={u.id}>
-                <td>{u.username}</td>
-                <td>
-                  <span className="pill">{u.role === "admin" ? "admin" : "conduttore"}</span>
-                </td>
-                <td className="muted small">{formatDate(u.createdAt)}</td>
-                <td className="cell-actions">
-                  {u.role === "admin" ? (
-                    <span className="muted small">account protetto</span>
-                  ) : (
-                    <>
-                      <button className="btn btn-ghost btn-small" onClick={() => { setResetFor(u.id); setResetPw(""); }}>
-                        Password
-                      </button>
-                      <button className="btn btn-ghost btn-small danger" onClick={() => onDelete(u.id)}>
-                        Elimina
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ),
-          )}
-        </tbody>
-      </table>
-      <p className="muted small" style={{ marginTop: 12 }}>
-        L'account admin non è modificabile da qui: cambia la sua password in Sicurezza. Gli altri utenti possono
-        condurre dirette ma non gestire utenti o configurazione.
-      </p>
-    </section>
-  );
-}
-
 function SettingsPanel({ notify }: { notify: (m: string) => void }) {
   const [form, setForm] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cdnResult, setCdnResult] = useState<CdnTestResult | null>(null);
   const [checks, setChecks] = useState<Checks | null>(null);
 
   useEffect(() => {
@@ -640,11 +590,14 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
 
   async function testCdn() {
     if (!form) return;
-    setCdnResult(null);
     setBusy(true);
     try {
       const target = form.cdnBaseUrl || form.publicBaseUrl;
-      setCdnResult(await api.post<CdnTestResult>("/api/admin/cdn-test", { url: target }));
+      const res = await api.post<{ ok: boolean; probe: string; status?: number; headers?: Record<string, string | null> }>(
+        "/api/admin/cdn-test",
+        { url: target },
+      );
+      notify(res.ok ? "CDN raggiungibile." : "CDN non raggiungibile.");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -664,26 +617,19 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       <div className={`banner ${checks?.cdnEnabled ? "banner-ok" : "banner-error"}`} style={{ marginBottom: 18 }}>
         <span className="small">
           {checks?.cdnEnabled
-            ? "CDN attiva: impianto adatto a migliaia di spettatori. Controlla che i tre LED siano verdi prima dell'evento."
+            ? "CDN attiva: impianto adatto a migliaia di spettatori. Verifica che i LED siano verdi prima dell'evento."
             : "Capacità del VPS: fino a ~500 spettatori simultanei il VPS da solo basta. Oltre serve la CDN: imposta l'URL qui sotto e verifica il LED verde."}
         </span>
       </div>
 
       <form className="grid-2" onSubmit={save}>
         <label className="field">
-          <span>Nome dell'installazione</span>
-          <input className="input" value={form.brandName} onChange={(e) => setField("brandName", e.target.value)} maxLength={40} />
-          <em className="muted">Compare nel pannello, nel player e nel titolo della pagina.</em>
-        </label>
-        <label className="field">
           <span className="row">{led(checks?.origin.ok ?? null)} URL pubblico</span>
           <input className="input" value={form.publicBaseUrl} onChange={(e) => setField("publicBaseUrl", e.target.value)} />
           <em className="muted">Il dominio della diretta, con https://. Il LED verifica che risponda dal server.</em>
         </label>
         <label className="field">
-          <span className="row">
-            {led(checks?.cdnEnabled ? checks.cdn?.ok ?? false : null)} CDN (opzionale)
-          </span>
+          <span className="row">{led(checks?.cdnEnabled ? (checks.cdn?.ok ?? false) : null)} CDN (opzionale)</span>
           <input
             className="input"
             value={form.cdnBaseUrl}
@@ -725,76 +671,6 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
 
       {message && <p className="ok-text small">{message}</p>}
       {error && <p className="error-text small">{error}</p>}
-
-      {cdnResult && (
-        <div className={`banner banner-${cdnResult.ok ? "ok" : "error"}`}>
-          <span className="small">
-            {cdnResult.ok ? "CDN raggiungibile" : "CDN non raggiungibile"} · {cdnResult.probe}
-            {cdnResult.status !== undefined && ` · HTTP ${cdnResult.status}`}
-            {cdnResult.headers?.["x-cache"] && ` · cache: ${cdnResult.headers["x-cache"]}`}
-          </span>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function SecurityPanel({ notify }: { notify: (m: string) => void }) {
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function changePassword(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post("/api/admin/password", { currentPassword, newPassword });
-      setCurrentPassword("");
-      setNewPassword("");
-      notify("Password aggiornata.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Sicurezza</h2>
-      </div>
-      {error && <p className="error-text small">{error}</p>}
-
-      <form className="stack" onSubmit={changePassword}>
-        <p className="small muted">Cambia la tua password (le altre sessioni vengono chiuse):</p>
-        <div className="row wrap">
-          <input
-            className="input"
-            type="password"
-            placeholder="Password attuale"
-            autoComplete="current-password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-          />
-          <input
-            className="input"
-            type="password"
-            placeholder="Nuova password (min. 12 caratteri)"
-            autoComplete="new-password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            minLength={12}
-            required
-          />
-          <button className="btn btn-primary btn-small" type="submit" disabled={busy}>
-            Aggiorna
-          </button>
-        </div>
-      </form>
     </section>
   );
 }

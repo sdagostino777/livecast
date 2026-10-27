@@ -17,6 +17,8 @@ export interface StreamRow {
   title: string;
   status: StreamStatus;
   kind: "video" | "audio";
+  poster_ext: string | null;
+  icon_ext: string | null;
   record: number;
   created_by: string | null;
   started_at: string | null;
@@ -30,6 +32,8 @@ export interface StreamView {
   title: string;
   status: StreamStatus;
   kind: "video" | "audio";
+  posterUrl: string | null;
+  iconUrl: string | null;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -44,6 +48,8 @@ export function toView(row: StreamRow, publicBaseUrl: string = process.env.PUBLI
     title: row.title,
     status: row.status,
     kind: row.kind,
+    posterUrl: row.poster_ext ? `/uploads/${row.slug}.poster.${row.poster_ext}` : null,
+    iconUrl: row.icon_ext ? `/uploads/${row.slug}.icon.${row.icon_ext}` : null,
     record: row.record === 1,
     startedAt: row.started_at,
     endedAt: row.ended_at,

@@ -50,6 +50,8 @@ export function openDb(file: string): Db {
       title      TEXT NOT NULL,
       status     TEXT NOT NULL DEFAULT 'draft',    -- draft | starting | live | ended
       kind       TEXT NOT NULL DEFAULT 'video',    -- video | audio
+      poster_ext TEXT,                             -- jpg | png | webp (file in DATA_DIR/uploads)
+      icon_ext   TEXT,
       record     INTEGER NOT NULL DEFAULT 0,
       created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
       started_at TEXT,
@@ -86,6 +88,12 @@ export function openDb(file: string): Db {
   const streamCols = db.prepare("PRAGMA table_info(streams)").all() as Array<{ name: string }>;
   if (!streamCols.some((c) => c.name === "kind")) {
     db.exec("ALTER TABLE streams ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'");
+  }
+  if (!streamCols.some((c) => c.name === "poster_ext")) {
+    db.exec("ALTER TABLE streams ADD COLUMN poster_ext TEXT");
+  }
+  if (!streamCols.some((c) => c.name === "icon_ext")) {
+    db.exec("ALTER TABLE streams ADD COLUMN icon_ext TEXT");
   }
 
   return db;

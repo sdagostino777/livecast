@@ -62,6 +62,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const orphans = reconcileOrphans(app.db);
   if (orphans > 0) app.log.warn({ orphans }, "ended orphaned streams left by a previous process");
 
+  // Image uploads arrive as raw bytes (`fetch(url, { body: file })`), not as
+  // multipart: one fewer dependency, and the panel controls what is sent.
+  app.addContentTypeParser(["image/jpeg", "image/png", "image/webp"], { parseAs: "buffer" }, (_req, body, done) => {
+    done(null, body);
+  });
+
   await app.register(cookie);
   await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute", keyGenerator: (req) => req.ip });
 
@@ -104,6 +110,17 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // HLS from the API process is a development convenience only: in production
   // nginx serves /hls/ straight from disk with cache headers, without involving
   // Node at all. Registering it here costs one conditional.
+  const uploadsRoot = path.join(config.dataDir, "uploads");
+  fs.mkdirSync(uploadsRoot, { recursive: true });
+  await app.register(fastifyStatic, {
+    root: uploadsRoot,
+    prefix: "/uploads/",
+    decorateReply: false,
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=3600");
+    },
+  });
+
   const hlsRoot = path.join(config.dataDir, "hls");
   if (fs.existsSync(hlsRoot)) {
     await app.register(fastifyStatic, {

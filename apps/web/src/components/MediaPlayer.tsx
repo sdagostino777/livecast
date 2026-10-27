@@ -9,6 +9,8 @@ export interface MediaPlayerProps {
   ended: boolean;
   title: string;
   brand: string;
+  /** Event poster shown in place of the frame before playback starts. */
+  posterUrl?: string | null;
 }
 
 type PlayerState = "idle" | "loading" | "playing" | "paused" | "error";
@@ -21,7 +23,7 @@ type PlayerState = "idle" | "loading" | "playing" | "paused" | "error";
  * play button and an equaliser that moves only while sound is actually coming
  * out of the device.
  */
-export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand }: MediaPlayerProps) {
+export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl }: MediaPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const retryTimer = useRef<number | null>(null);
@@ -177,6 +179,10 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand }: MediaPl
 
   return (
     <div className={`player-frame${kind === "audio" ? " audio" : ""}`}>
+      {posterUrl && kind === "video" && !playing && (
+        <img className="player-poster" src={posterUrl} alt="" aria-hidden />
+      )}
+
       {kind === "audio" ? (
         <audio
           ref={(el) => {
