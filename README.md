@@ -12,6 +12,9 @@ code is organised around failure, not around convenience. See
 
 ![The player — play and pause, nothing else](docs/screenshots/player.png)
 
+*Both screenshots are captures of a live broadcast on production
+(`https://live.ndx-llc.com`), taken by Playwright through a real Chrome instance.*
+
 ```
  OBS ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
                          │
