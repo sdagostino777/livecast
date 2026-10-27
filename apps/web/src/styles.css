@@ -715,6 +715,18 @@ h2 {
   background: radial-gradient(circle at 50% 45%, rgba(34, 74, 120, 0.35), rgba(3, 12, 24, 0.55));
 }
 
+/* The poster is the event's own artwork: keep its title readable and park the
+   controls underneath it. */
+.player-overlay.play,
+.player-overlay.soft {
+  align-items: flex-end;
+  padding-bottom: 7%;
+}
+
+.player-overlay.soft {
+  background: linear-gradient(to bottom, rgba(4, 16, 29, 0.1) 45%, rgba(4, 16, 29, 0.82));
+}
+
 .player-message {
   text-align: center;
   padding: 24px;

@@ -154,7 +154,7 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
   };
 
   const overlay = notStarted ? (
-    <div className="player-overlay">
+    <div className="player-overlay soft">
       <div className="player-message">
         {iconUrl && <img className="player-event-icon" src={iconUrl} alt="" aria-hidden />}
         {title && <p className="player-message-title">{title}</p>}
@@ -202,6 +202,7 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
             mediaRef.current = el;
           }}
           className="player-video"
+          style={{ visibility: playing ? "visible" : "hidden" }}
           aria-label={title}
           onClick={toggle}
           {...mediaProps}
@@ -241,7 +242,7 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
       ) : (
         <>
           {(state === "idle" || state === "paused") && !notStarted && !ended && (
-            <div className="player-overlay">
+            <div className="player-overlay play">
               <button className="play-button" onClick={toggle} aria-label={state === "paused" ? "Riprendi" : "Riproduci"}>
                 <svg viewBox="0 0 24 24" aria-hidden>
                   <path d="M8 5v14l11-7z" fill="currentColor" />
