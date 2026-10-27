@@ -7,7 +7,7 @@
  * publisher for longer than the grace period, the broadcast is ended and its
  * segments are removed — the same state STOP would leave.
  *
- * The grace period exists because publishers blink: a Wi-Fi hiccup, an OBS
+ * The grace period exists because publishers blink: a Wi-Fi hiccup, an encoder
  * reconnect, a browser that renegotiates. Twenty seconds is long enough to ride
  * those out and short enough that nobody stares at a dead picture.
  */

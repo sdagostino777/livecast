@@ -219,6 +219,3 @@ export function setPassword(db: Db, userId: string, passwordHash: string): void 
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
 }
 
-export function setTotpSecret(db: Db, userId: string, secret: string | null, enabled: boolean): void {
-  db.prepare("UPDATE users SET totp_secret = ?, totp_enabled = ? WHERE id = ?").run(secret, enabled ? 1 : 0, userId);
-}

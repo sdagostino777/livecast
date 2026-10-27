@@ -7,19 +7,21 @@ to get wrong: attaching a CDN, and verifying the encoder.
 
 1. `systemctl status livecast livecast-mediamtx` — both `active (running)`.
 2. Open `https://<domain>/admin` and log in.
-3. Create the broadcast ("Crea"), choosing **Video** or **Solo audio** and the
-   event images. It appears in **Dirette** as a draft.
-4. Press **Vai in onda** on that row: status becomes **In attesa di programma esterno**. An
-   audio-only broadcast ignores any video programma esterno sends, so the operator can leave
-   the scene as it is.
-4. In programma esterno, start streaming. The panel flips to **In onda** within ~5 s.
-5. Open the `/live/<slug>` link on a phone over mobile data, press play, and
+3. Write the event title and choose **Video** or **Solo audio**; upload the poster
+   if the event has one. Everything saves itself — there is no "Salva".
+4. Press **● ONLINE** (or connect camera/screen first and press it after): the
+   panel shows **Preparazione…** until the first segment reaches the player. An
+   audio-only broadcast ignores any video a publisher sends, so the operator can
+   leave the scene as it is.
+5. Start the encoder (browser or external program). The panel flips to **In onda**
+   within ~5 s, with the elapsed time and the number of connected viewers.
+6. Open the `/live/<slug>` link on a phone over mobile data, press play, and
    confirm the **LIVE** badge. This is the only test that matters.
-6. For a large event: attach the CDN **before** sharing the link (next section).
-7. After the event: **Termina**. The stream status becomes "Terminata"; the
-   public page says so.
+7. For a large event: attach the CDN **before** sharing the link (next section).
+8. After the event: **■ STOP**. The public page says the broadcast is over;
+   **Nuovo evento** opens the next one with a fresh link.
 
-If programma esterno never connects, the stream ends itself after `INGEST_WAIT_SECONDS` (10
+If the encoder never connects, the stream ends itself after `INGEST_WAIT_SECONDS` (10
 minutes by default) rather than waiting forever — restart it from the panel.
 
 ## Redundancy drill (primary / backup encoder)
@@ -38,9 +40,9 @@ To rehearse:
    FFmpeg relaunches, nothing more.
 3. Restart the primary: the next relaunch (or the next dropout) returns to it.
 
-The backup encoder can be a second programma esterno on another machine, a phone, or a spare
+The backup encoder can be a second the encoder on another machine, a phone, or a spare
 laptop on a different network. Two encoders on the same Wi-Fi protect against
-the programma esterno crashing, not against the network dying.
+the the encoder crashing, not against the network dying.
 
 ## Managing people
 
@@ -83,7 +85,7 @@ To go back to origin delivery: clear the CDN field and save.
 ## Verifying the encoder without a broadcaster
 
 Run this on the VPS (or anywhere with FFmpeg) to produce the exact ladder the
-pipeline produces, without programma esterno or MediaMTX:
+pipeline produces, without the encoder or MediaMTX:
 
 ```bash
 ffmpeg -hide_banner \
@@ -150,7 +152,7 @@ Expect `Cache-Control: public, max-age=31536000, immutable` on segments and
 
 | Symptom | Check |
 | --- | --- |
-| Panel shows "programma esterno non collegato" | `journalctl -u livecast-mediamtx -n 50`; is 1935/tcp open (`ufw status`)? Is the RTMP URL in programma esterno the one the panel shows? |
+| Panel shows "the encoder non collegato" | `journalctl -u livecast-mediamtx -n 50`; is 1935/tcp open (`ufw status`)? Is the RTMP URL in the encoder the one the panel shows? |
 | Panel shows "MediaMTX non raggiungibile" | `curl -s http://127.0.0.1:9997/v3/paths/get/live` — the media server process, not the broadcaster, is down. |
 | Stream stays "Preparazione video…" | `journalctl -u livecast -f` — FFmpeg's stderr is logged there (last 600 chars also surface in the panel). |
 | Player says "Segnale non disponibile" | The page retries by itself for ~1 minute. If the encoder log shows repeated restarts, the publisher is gone. |

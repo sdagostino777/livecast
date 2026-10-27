@@ -61,11 +61,8 @@ export interface StreamView {
   kind: "video" | "audio";
   posterUrl: string;
   posterImageUrl: string | null;
-  iconUrl: string | null;
-  publicIconUrl: string;
   fallbackPosterUrl: string;
   adminPosterUrl: string;
-  adminIconUrl: string;
   posterPalette: string | null;
   posterOverlay: boolean;
   record: boolean;
@@ -108,7 +105,7 @@ export interface Settings {
   ingestHost: string;
   ingestPort: number;
   hlsBaseUrl: string;
-  obsServer: string;
+  serverUrl: string;
 }
 
 export interface CdnTestResult {
@@ -126,8 +123,6 @@ export interface LiveMeta {
   kind: "video" | "audio";
   posterUrl: string;
   posterImageUrl: string | null;
-  iconUrl: string | null;
-  publicIconUrl: string;
   posterOverlay: boolean;
   fallbackPosterUrl: string;
   startedAt: string | null;
@@ -178,11 +173,7 @@ export async function removeBrandLogo(): Promise<void> {
   if (!res.ok) throw new ApiError(res.status, "remove_failed");
 }
 
-export async function uploadStreamImage(
-  streamId: string,
-  kind: "poster" | "icon",
-  file: File,
-): Promise<StreamView> {
+export async function uploadStreamImage(streamId: string, kind: "poster", file: File): Promise<StreamView> {
   const type = file.type || (file.name.endsWith(".png") ? "image/png" : file.name.endsWith(".webp") ? "image/webp" : "image/jpeg");
   const res = await fetch(`/api/admin/streams/${streamId}/${kind}`, {
     method: "POST",
@@ -210,10 +201,6 @@ export async function uploadStreamImage(
  */
 export function posterSrc(stream: { adminPosterUrl: string }): string {
   return stream.adminPosterUrl;
-}
-
-export function iconSrc(stream: { iconUrl: string | null; adminIconUrl: string }): string {
-  return stream.iconUrl ?? stream.adminIconUrl;
 }
 
 export async function recoverPassword(username: string, code: string, newPassword: string): Promise<void> {

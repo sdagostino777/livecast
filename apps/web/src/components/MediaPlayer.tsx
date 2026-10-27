@@ -11,8 +11,6 @@ export interface MediaPlayerProps {
   brand: string;
   /** Event poster shown in place of the frame before playback starts. */
   posterUrl?: string | null;
-  /** Event icon shown above the title before playback starts. */
-  iconUrl?: string | null;
 }
 
 type PlayerState = "idle" | "loading" | "playing" | "paused" | "error";
@@ -25,7 +23,7 @@ type PlayerState = "idle" | "loading" | "playing" | "paused" | "error";
  * play button and an equaliser that moves only while sound is actually coming
  * out of the device.
  */
-export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl, iconUrl }: MediaPlayerProps) {
+export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl }: MediaPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const retryTimer = useRef<number | null>(null);
@@ -156,7 +154,6 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
   const overlay = notStarted ? (
     <div className="player-overlay soft">
       <div className="player-message">
-        {iconUrl && <img className="player-event-icon" src={iconUrl} alt="" aria-hidden />}
         {title && <p className="player-message-title">{title}</p>}
         <p className={title ? "muted small" : "player-message-title"}>La diretta non è ancora iniziata</p>
         {title && <p className="muted small">Torna qui all'orario previsto.</p>}

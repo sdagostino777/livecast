@@ -20,9 +20,9 @@ export interface RuntimeSettings {
   publicBaseUrl: string;
   /** Optional CDN origin (Bunny/Cloudflare/Fastly). Empty = serve HLS from the VPS. */
   cdnBaseUrl: string;
-  /** Host OBS points at. Usually the same as publicBaseUrl's host. */
+  /** Host the encoder points at. Usually the same as publicBaseUrl's host. */
   ingestHost: string;
-  /** RTMP port OBS points at. */
+  /** RTMP port the encoder points at. */
   ingestPort: number;
 }
 

@@ -310,7 +310,7 @@ describe("admin + public stream lifecycle", () => {
     const initial = await app.inject({ method: "GET", url: "/api/admin/settings", headers: { cookie } });
     expect(initial.statusCode).toBe(200);
     expect(initial.json().cdnBaseUrl).toBe("");
-    expect(initial.json().obsServer).toBe("rtmp://localhost:1935/live");
+    expect(initial.json().serverUrl).toBe("rtmp://localhost:1935/live");
 
     const updated = await app.inject({
       method: "PUT",
@@ -320,7 +320,7 @@ describe("admin + public stream lifecycle", () => {
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().hlsBaseUrl).toBe("https://cdn.example");
-    expect(updated.json().obsServer).toBe("rtmp://localhost:19350/live");
+    expect(updated.json().serverUrl).toBe("rtmp://localhost:19350/live");
 
     const invalid = await app.inject({
       method: "PUT",
@@ -554,7 +554,7 @@ describe("admin + public stream lifecycle", () => {
 
     const anonymous = await app.inject({
       method: "POST",
-      url: `/api/admin/streams/${stream.id}/icon`,
+      url: `/api/admin/streams/${stream.id}/poster`,
       headers: { "content-type": "image/png" },
       payload: png,
     });
@@ -690,7 +690,7 @@ describe("admin + public stream lifecycle", () => {
     expect(reuse.statusCode).toBe(401);
   });
 
-  it("generates poster and icon artwork when no image was uploaded", async () => {
+  it("generates poster artwork when no image was uploaded", async () => {
     const cookie = await login();
     const created = await app.inject({
       method: "POST",
@@ -716,10 +716,6 @@ describe("admin + public stream lifecycle", () => {
 
     const anonPoster = await app.inject({ method: "GET", url: `/api/admin/poster/${stream.id}` });
     expect(anonPoster.statusCode).toBe(401);
-
-    const adminIcon = await app.inject({ method: "GET", url: `/api/admin/icon/${stream.id}`, headers: { cookie } });
-    expect(adminIcon.statusCode).toBe(200);
-    expect(adminIcon.body).toContain("CR"); // initials
 
     // Once public, the generated poster is served without a session.
     await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });

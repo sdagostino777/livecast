@@ -927,8 +927,8 @@ function ExternalEncoderPanel({ ov }: { ov: Overview | null }) {
 
   if (!ov) return null;
   return (
-    <div className="obs">
-      <div className="obs-head">
+    <div className="encoder">
+      <div className="encoder-head">
         <span className={`dot ${ov.ingest.ready ? "on" : "off"}`} aria-hidden />
         <span className="small">Dispositivo/encoder collegato: {ov.ingest.ready ? "sì" : "no"}</span>
         <span className={`dot ${ov.ingest.backupReady ? "on" : "off"}`} aria-hidden />

@@ -51,7 +51,7 @@
       <div class="card">
         <p><b>The flow, simplified:</b></p>
         <div class="flow">
-          <div class="node">📹 programma esterno<br /><span class="small" style="color: #144a86">the encoder</span></div>
+          <div class="node">📹 external encoder<br /><span class="small" style="color: #144a86">optional</span></div>
           <div class="arrow">→</div>
           <div class="node">🖥️ Livecast VPS<br /><span class="small" style="color: #144a86">turns it into streams</span></div>
           <div class="arrow">→</div>
@@ -76,7 +76,7 @@
 <div class="page">
       <h2>1. What you need</h2>
       <ul class="steps">
-        <li><b>programma di trasmissione esterno</b> on a computer (Windows, macOS, Linux) — the program that sends the video. Free, <span class="mono">obsproject.com</span>.</li>
+        <li><b>an external streaming program</b> on a computer (Windows, macOS, Linux) — the program that sends the video. Free ones exist for all three; this guide does not require any specific one.</li>
         <li><b>A VPS</b> running Ubuntu (4 GB of RAM is plenty for one broadcast) and a <b>domain</b> with a DNS <span class="mono">A</span> record pointing at the VPS.</li>
         <li>The Livecast repository, and five minutes for the initial install.</li>
       </ul>
@@ -97,7 +97,7 @@
       </div>
       <p class="small">
         It installs the media server, the encoder, the services that restart themselves after a failure, free HTTPS,
-        the firewall and the <b>admin</b> account. Nothing else: programma esterno is not mandatory and no file needs editing by
+        the firewall and the <b>admin</b> account. Nothing else: an external encoder is not mandatory and no file needs editing by
         hand.
       </p>
 
@@ -164,16 +164,16 @@
         <p class="small">
           <b>Two ways, no mandatory software.</b> In the panel, under the broadcast, you find
           <b>Collega camera</b> and <b>Collega schermo</b> preview and connect the browser to the server — <b>nobody sees you</b> until you press <b>● ONLINE</b>. The page must stay
-          open during the broadcast — reloading it stops the transmission. For long events programma esterno is the safer choice
+          open during the broadcast — reloading it stops the transmission. For long events an external encoder is the safer choice
           (it reconnects by itself): here is how to configure it.
         </p>
       </div>
       <p>
-        In the panel press <b>Mostra credenziali</b> (show credentials) and copy the full server URL. In programma esterno →
+        In the panel press <b>Mostra credenziali</b> (show credentials) and copy the full server URL. In the encoder →
         <b>Settings → Stream</b>:
       </p>
       <div class="mock">
-        <div class="mock-head">programma di trasmissione esterno — Settings → Stream</div>
+        <div class="mock-head">external encoder — Settings → Stream</div>
         <div class="mock-body">
           <div class="mock-row"><span class="mock-label">Service</span><span class="mock-input">Custom…</span></div>
           <div class="mock-row"><span class="mock-label">Server</span><span class="mock-input">rtmp://live.yourdomain.com:1935/live?user=publisher&amp;pass=••••••</span></div>
@@ -181,7 +181,7 @@
         </div>
       </div>
       <p>
-        Press <b>Start streaming</b> in programma esterno: the panel turns to <b>In onda</b> within seconds and the
+        Press <b>Start streaming</b> in the encoder: the panel turns to <b>In onda</b> within seconds and the
         <b>time on air</b> counter starts. Next to the state you can read how many people are <b>connected</b> right
         now. Copy the link and share it: WhatsApp already shows a preview with the event name and image. Viewers see
         the poster and a play button — play and pause, nothing more.
@@ -248,7 +248,7 @@
 
       <h3>When things break</h3>
       <ul class="steps">
-        <li><b>programma esterno disconnects</b> → the encoder restarts by itself within seconds; when programma esterno reconnects the video returns.</li>
+        <li><b>the encoder disconnects</b> → the pipeline restarts by itself within seconds; when the encoder reconnects the video returns.</li>
         <li><b>The primary encoder dies</b> → if a second encoder is connected to the backup URL, the panel shows “In uso: backup” and the broadcast continues.</li>
         <li><b>The server dies</b> → no software on that server can save it: you need a standby VPS with the data (the <span class="mono">DATA_DIR</span> folder) and DNS re-pointed. That is the emergency plan to prepare for important events.</li>
       </ul>

@@ -75,19 +75,6 @@ export function Player({ slug }: { slug: string }) {
     document.title = `${meta.title} · ${brand}`;
   }, [meta?.title, brand]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The event icon replaces the site icon in the tab: when several links are
-  // open, this is what tells them apart.
-  useEffect(() => {
-    if (!meta) return;
-    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (!link) return;
-    const previous = link.href;
-    link.href = meta.publicIconUrl;
-    return () => {
-      link.href = previous;
-    };
-  }, [meta?.publicIconUrl]); // eslint-disable-line react-hooks/exhaustive-deps
-
   if (notFound) {
     return (
       <div className="player-page">
@@ -113,7 +100,6 @@ export function Player({ slug }: { slug: string }) {
           title={meta?.title ?? ""}
           brand={brand}
           posterUrl={meta?.posterUrl ?? meta?.fallbackPosterUrl ?? null}
-          iconUrl={meta?.publicIconUrl ?? null}
         />
       </main>
       <footer className="player-footer">

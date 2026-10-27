@@ -3,7 +3,7 @@
  *
  * The broadcaster pushes one RTMP stream into MediaMTX; FFmpeg reads it back
  * over loopback and encodes the HLS ladder. Two very different URLs come out of
- * this file: the public one (what goes into OBS, built from the operator-edited
+ * this file: the public one (what an external encoder gets, built from the operator-edited
  * settings) and the loopback one (what FFmpeg uses, with credentials the admin
  * never needs to see).
  *
@@ -22,12 +22,12 @@ function withQuery(base: string, user: string, pass: string): string {
   return url.toString();
 }
 
-/** The OBS "Server" value without credentials, e.g. rtmp://live.example.com:1935/live */
+/** The encoder "Server" value without credentials, e.g. rtmp://live.example.com:1935/live */
 export function ingestServer(settings: RuntimeSettings, path: string = config.ingestPath): string {
   return `rtmp://${settings.ingestHost}:${settings.ingestPort}/${path}`;
 }
 
-/** The full URL to paste into OBS (admin-authenticated page only). Stream key stays empty. */
+/** The full URL to paste into an external encoder (admin-authenticated page only). Stream key stays empty. */
 export function ingestServerWithCreds(settings: RuntimeSettings, path: string = config.ingestPath): string | null {
   if (!config.publishPass) return null;
   return withQuery(ingestServer(settings, path), config.publishUser, config.publishPass);

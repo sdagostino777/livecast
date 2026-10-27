@@ -1,6 +1,6 @@
 # Livecast
 
-**Self-hostable live audio/video streaming.** A small team broadcasts from programma esterno;
+**Self-hostable live audio/video streaming.** A small team broadcasts from the browser or an external encoder;
 the audience gets a shareable link and a player with play and pause. Adaptive
 HLS for video, a clean audio-only mode, and a control plane small enough to read
 in an afternoon — running on a €8 VPS until the audience justifies a CDN.
@@ -15,11 +15,11 @@ code is organised around failure, not around convenience. See
 
 ![The player — play and pause, nothing else](docs/screenshots/player.png)
 
-*Both screenshots are captures of a live broadcast on production
-(`https://live.example.com`), taken by Playwright through a real Chrome instance.*
+*Every screenshot in this repository is a capture of a real broadcast, taken by
+Playwright through a real Chrome instance — no mock-ups.*
 
 ```
- programma esterno ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
+ encoder ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
                          │
                          ▼
                     FFmpeg ──▶ 720p / 480p / 360p HLS ──▶ nginx ──▶ Bunny/Cloudflare CDN (optional)
@@ -41,7 +41,7 @@ code is organised around failure, not around convenience. See
 | **Users, not just an account** | One admin manages accounts; operators can run broadcasts. The admin account itself cannot be deleted or have its password reset by anyone else. |
 | **Event poster** | Each broadcast carries a 16:9 poster — what viewers see before pressing play — uploaded from the panel, with an optional title drawn over it, or generated automatically from the title on a gradient. The install's own logo lives in **Configurazione**, not on the event. |
 | **Light / dark / system** | The panel follows a theme preference; the player stays dark on purpose. |
-| **Publishing without programma esterno** | Camera or screen share straight from the panel over WebRTC (WHIP); programma esterno stays supported for long events. |
+| **Publishing without an encoder** | Camera or screen share straight from the panel over WebRTC (WHIP); an external encoder stays supported for long events. |
 | **First-run safety** | The default `admin / admin` account must change its password before the panel does anything else. |
 | **SQLite** | One operator, a handful of streams. A database server would be a process to keep alive for no benefit. |
 
@@ -78,9 +78,9 @@ units that restart themselves, nginx, free HTTPS, the firewall and the admin
 account. Then open `https://live.yourdomain.com/admin`, sign in as
 **admin / admin** — the panel forces a new password immediately.
 
-No programma esterno is required: the panel can publish from the camera or a shared screen
+No external encoder is required: the panel can publish from the camera or a shared screen
 (WebRTC over WHIP). The page must stay open while publishing; for long events
-programma esterno remains the sturdier option and the panel shows its URL.
+an external encoder remains the sturdier option and the panel shows its URL.
 
 ## Deploy on a VPS
 
@@ -99,7 +99,7 @@ Both scripts are idempotent. The deploy prints the generated admin password once
 and stores it in `/root/.livecast-credentials` on the server.
 
 Then: open `https://<domain>/admin`, log in, and copy the RTMP URL the panel
-shows into **programma esterno → Settings → Stream → Server** (stream key left empty). Create
+shows into **an external encoder → Settings → Stream → Server** (stream key left empty). Create
 a broadcast from the panel and press play on `/live/<slug>`.
 
 ## The panel in one screen
@@ -129,14 +129,14 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 ## Make it yours
 
-The name and the logo are configuration, not code: **Identità** in the panel
-renames the service everywhere (panel, player, page title, link previews) and
-uploads your own square logo, which replaces the generated play symbol and
-becomes the browser tab icon. Nothing in the UI says "Livecast" until you leave
-it that way.
+The name and the logo are configuration, not code: **Configurazione** in the
+settings page renames the service everywhere (panel, player, page title, link
+previews) and uploads your own square logo, which replaces the generated play
+symbol and becomes the browser tab icon. Nothing in the UI says "Livecast" until
+you leave it that way.
 
-- **Name** — Configurazione → *Nome dell'installazione*. It appears in the panel,
-  the player and the page title; no rebuild needed.
+- **Name** — Configurazione → *Nome del servizio*. It appears in the panel, the
+  player and the page title; no rebuild needed.
 - **Colours** — the palette lives in `apps/web/src/styles.css` (`:root` tokens).
   The light theme and the dark player are two gradients and a handful of
   variables, not a framework.
@@ -180,11 +180,11 @@ a code back from the database.
 | `PORT` / `HOST` | `4100` / `127.0.0.1` | Fastify listener behind nginx. |
 | `DATA_DIR` | `./data` | SQLite database, HLS output, recordings. |
 | `PUBLIC_URL` | `http://localhost:4100` | Canonical origin: page links and the Origin check. |
-| `INGEST_HOST` / `INGEST_PORT` | host from `PUBLIC_URL` / `1935` | What programma esterno connects to (editable at runtime in the panel). |
+| `INGEST_HOST` / `INGEST_PORT` | host from `PUBLIC_URL` / `1935` | What the encoder connects to (editable at runtime in the panel). |
 | `PUBLISH_USER` / `PUBLISH_PASS` | `publisher` / — | Broadcaster credentials shown in the panel, enforced by MediaMTX. |
 | `MEDIAMTX_READ_USER` / `_PASS` | — | Loopback credentials FFmpeg uses to read the stream. |
 | `COOKIE_SECURE` | `false` in dev, `true` in production | Session cookies over TLS only. |
-| `INGEST_WAIT_SECONDS` | `600` | How long a stream waits for programma esterno before ending itself. |
+| `INGEST_WAIT_SECONDS` | `600` | How long a stream waits for a publisher before ending itself. |
 | `BRAND_NAME` | `Livecast` | Display name until one is saved in the panel. |
 
 Runtime settings (public URL, CDN, ingest host/port) live in the database,
@@ -211,9 +211,9 @@ and the operator runbook (go-live checklist, CDN attach, troubleshooting) is
 
 | Failure | What recovers it |
 | --- | --- |
-| programma esterno disconnects / laptop sleeps | FFmpeg exits, the supervisor relaunches it in < 3 s, the publisher reconnects when it can |
+| The encoder disconnects / laptop sleeps | FFmpeg exits, the supervisor relaunches it in < 3 s, the publisher reconnects when it can |
 | Encoder hangs with an open socket | Watchdog: 2 minutes of unchanged segments ⇒ SIGKILL + relaunch, stream stays live |
-| Media server crashes | systemd restarts it in 2 s; the broadcast resumes on programma esterno reconnect |
+| Media server crashes | systemd restarts it in 2 s; the broadcast resumes when the encoder reconnects |
 | API crashes | systemd restarts it; the player keeps its last segments and the page polls |
 | Event-size audience | CDN base URL in the panel — segments are immutable and cache for a year |
 
@@ -243,7 +243,7 @@ the single Diretta card is the whole story.
 ## Guides
 
 Two illustrated quick-start guides — install once, create a broadcast, go live
-from programma esterno, attach a CDN, survive the unexpected. Same content, two languages:
+from the browser or an encoder, attach a CDN, survive the unexpected. Same content, two languages:
 
 | | |
 | --- | --- |

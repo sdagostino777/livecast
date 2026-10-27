@@ -12,11 +12,7 @@ import type { FastifyInstance } from "fastify";
 import fs from "node:fs";
 import { z } from "zod";
 
-import path from "node:path";
-
 import { artworkFor } from "../artwork.js";
-import { uploadsDir } from "../config.js";
-import { iconSvg } from "../poster.js";
 import { isSlug } from "../ids.js";
 import { touchViewer } from "../presence.js";
 import { getStreamBySlug, toView } from "../streams.js";
@@ -39,24 +35,6 @@ export async function liveRoutes(app: FastifyInstance): Promise<void> {
     }
     reply.header("content-type", "image/svg+xml; charset=utf-8");
     return art.body;
-  });
-
-  // The event icon: the browser tab icon while the page is open, and the badge
-  // next to the title before the broadcast starts.
-  app.get("/api/icon/:slug", async (req, reply) => {
-    const { slug } = req.params as { slug?: string };
-    if (!slug || !isSlug(slug)) return reply.code(404).send({ error: "not_found" });
-    const row = getStreamBySlug(app.db, slug);
-    if (!row) return reply.code(404).send({ error: "not_found" });
-    reply.header("cache-control", "public, max-age=300").header("x-robots-tag", "noindex");
-    if (row.icon_ext) {
-      const file = path.join(uploadsDir(), `${row.slug}.icon.${row.icon_ext}`);
-      const type = row.icon_ext === "png" ? "image/png" : row.icon_ext === "webp" ? "image/webp" : "image/jpeg";
-      reply.header("content-type", type);
-      return reply.send(fs.createReadStream(file));
-    }
-    reply.header("content-type", "image/svg+xml; charset=utf-8");
-    return iconSvg({ title: row.title, seed: row.slug, palette: row.poster_palette });
   });
 
   // Heartbeat from an open player page: the panel shows how many people are

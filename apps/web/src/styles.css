@@ -555,7 +555,7 @@ h2 {
   font-size: 16.5px;
 }
 
-.obs {
+.encoder {
   border: 1.5px dashed var(--line);
   border-radius: 12px;
   padding: 16px;
@@ -565,7 +565,7 @@ h2 {
   background: var(--surface-2);
 }
 
-.obs-head {
+.encoder-head {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1325,12 +1325,6 @@ h2 {
   flex: 1;
 }
 
-.icon-thumb {
-  width: 40px;
-  height: 40px;
-}
-
-.icon-thumb.placeholder,
 .thumb.placeholder {
   border-style: dashed;
   background: var(--surface-2);
@@ -1405,16 +1399,6 @@ h2 {
   border-radius: 10px;
   border: 1px solid var(--line);
   background: #04101d;
-}
-
-.player-event-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  object-fit: cover;
-  margin: 0 auto 14px;
-  display: block;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
 .online-timer {

@@ -208,7 +208,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
      * JavaScript that would paint the event page. The shared link therefore gets
      * Open Graph tags injected here, with the operator's own name, the event
      * title and an image that WhatsApp can actually display (a generated SVG is
-     * not one of those, so the uploaded poster or icon is used when it exists).
+     * not one of those, so the uploaded poster is used when there is one).
      */
     function socialHead(slug: string): string {
       const row = getStreamBySlug(app.db, slug);
@@ -219,19 +219,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
       const title = `${row.title} · ${settings.brandName}`;
       const description = `Diretta di ${settings.brandName}. Apri il link per ascoltare.`;
-      // A raster image is required: the poster, else the square icon, else the
-      // platform falls back to the title alone.
-      const image = row.poster_ext
-        ? `${base}/uploads/${row.slug}.poster.${row.poster_ext}`
-        : row.icon_ext
-          ? `${base}/uploads/${row.slug}.icon.${row.icon_ext}`
-          : null;
+      // A raster image is required — the generated artwork is an SVG, which these
+      // platforms do not render — so the uploaded poster is used when it exists.
+      const image = row.poster_ext ? `${base}/uploads/${row.slug}.poster.${row.poster_ext}` : null;
       // Real dimensions, when the file can be read, so the preview is not cropped.
       const imageFile = row.poster_ext
         ? path.join(config.dataDir, "uploads", `${row.slug}.poster.${row.poster_ext}`)
-        : row.icon_ext
-          ? path.join(config.dataDir, "uploads", `${row.slug}.icon.${row.icon_ext}`)
-          : null;
+        : null;
       let size: { width: number; height: number } | null = null;
       if (imageFile) {
         try {

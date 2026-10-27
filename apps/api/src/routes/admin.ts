@@ -7,11 +7,10 @@
  *   POST   /api/admin/streams             create a draft stream
  *   PATCH  /api/admin/streams/:id         edit title/record while still draft
  *   DELETE /api/admin/streams/:id         remove a draft or ended stream
- *   POST   /api/admin/streams/:id/start   arm the pipeline and wait for OBS
+ *   POST   /api/admin/streams/:id/start   arm the pipeline and wait for a publisher
  *   POST   /api/admin/streams/:id/stop    stop the active stream
- *   GET    /api/admin/ingest              reveal OBS credentials (audited)
+ *   GET    /api/admin/ingest              reveal the ingest credentials (audited)
  *   POST   /api/admin/password            change password
- *   POST   /api/admin/totp/setup|enable|disable
  *   GET    /api/admin/audit               recent privileged actions
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -47,7 +46,6 @@ import { posterSmallPath } from "../artwork.js";
 import { removeBrandLogo, saveBrandLogo } from "../brand.js";
 import { makePosterCopy } from "../images.js";
 import { countViewers } from "../presence.js";
-import { iconSvg } from "../poster.js";
 import { journalLines, recentInMemory, remember } from "../services/logs.js";
 import { ingestServer, ingestServerWithCreds, mediaInputUrl, mediaRtspInputUrl } from "../ingest.js";
 
@@ -216,7 +214,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return {
       server: url,
       backupServer: backupUrl,
-      // OBS: paste this in "Server" and leave "Stream Key" empty.
+      // An external encoder: paste this in "Server" and leave "Stream Key" empty.
       streamKey: "",
       publishUser: config.publishUser,
     };
@@ -235,7 +233,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       ingestHost: settings.ingestHost,
       ingestPort: settings.ingestPort,
       hlsBaseUrl: app.settings.hlsBaseUrl(),
-      obsServer: ingestServer(settings),
+      serverUrl: ingestServer(settings),
     };
   });
 
@@ -260,7 +258,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         ingestHost: next.ingestHost,
         ingestPort: next.ingestPort,
         hlsBaseUrl: app.settings.hlsBaseUrl(),
-        obsServer: ingestServer(next),
+        serverUrl: ingestServer(next),
       };
     } catch (err) {
       const code = err instanceof Error ? err.message : "invalid_settings";
@@ -350,13 +348,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       } catch {
         /* not present */
       }
-      for (const kind of ["poster", "icon"] as const) {
-        for (const ext of ["jpg", "png", "webp"]) {
-          try {
-            fs.unlinkSync(path.join(uploadsDir(), `${old.slug}.${kind}.${ext}`));
-          } catch {
-            /* not present */
-          }
+      for (const ext of ["jpg", "png", "webp"]) {
+        try {
+          fs.unlinkSync(path.join(uploadsDir(), `${old.slug}.poster.${ext}`));
+        } catch {
+          /* not present */
         }
       }
       deleteStreamRow(app.db, old.id);
@@ -441,13 +437,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         /* not present */
       }
     }
-    for (const kind of ["poster", "icon"] as const) {
-      for (const ext of ["jpg", "png", "webp"]) {
-        try {
-          fs.unlinkSync(path.join(uploadsDir(), `${stream.slug}.${kind}.${ext}`));
-        } catch {
-          /* not present */
-        }
+    for (const ext of ["jpg", "png", "webp"]) {
+      try {
+        fs.unlinkSync(path.join(uploadsDir(), `${stream.slug}.poster.${ext}`));
+      } catch {
+        /* not present */
       }
     }
     deleteStreamRow(app.db, stream.id);
@@ -618,26 +612,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return art.body;
   });
 
-  app.get("/api/admin/icon/:id", async (req, reply) => {
-    const session = requireSession(app.db, req, reply);
-    if (!session) return reply;
-    const params = safeParse(IdParams, req.params);
-    if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
-    const stream = getStreamById(app.db, params.data.id);
-    if (!stream) return reply.code(404).send({ error: "not_found" });
-    reply.header("cache-control", "no-store");
-    if (stream.icon_ext) {
-      const file = path.join(uploadsDir(), `${stream.slug}.icon.${stream.icon_ext}`);
-      const type = stream.icon_ext === "png" ? "image/png" : stream.icon_ext === "webp" ? "image/webp" : "image/jpeg";
-      reply.header("content-type", type);
-      return reply.send(fs.createReadStream(file));
-    }
-    reply.header("content-type", "image/svg+xml; charset=utf-8");
-    return iconSvg({ title: stream.title, seed: stream.slug, palette: stream.poster_palette });
-  });
-
-  // --- event images (poster before playback, square icon in lists) ----------
-  async function uploadImage(req: FastifyRequest, reply: FastifyReply, kind: "poster" | "icon") {
+  // --- the event poster (what viewers see before pressing play) -------------
+  async function uploadPoster(req: FastifyRequest, reply: FastifyReply) {
     const session = requireSession(app.db, req, reply);
     if (!session) return reply;
     const params = safeParse(IdParams, req.params);
@@ -659,20 +635,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     for (const old of ["jpg", "png", "webp"]) {
       if (old !== ext) {
         try {
-          fs.unlinkSync(path.join(dir, `${stream.slug}.${kind}.${old}`));
+          fs.unlinkSync(path.join(dir, `${stream.slug}.poster.${old}`));
         } catch {
           /* not present */
         }
       }
     }
-    const target = path.join(dir, `${stream.slug}.${kind}.${ext}`);
+    const target = path.join(dir, `${stream.slug}.poster.${ext}`);
     fs.writeFileSync(target, body);
-    if (kind === "poster") makePosterCopy(target, posterSmallPath(stream.slug));
-    app.db.prepare(`UPDATE streams SET ${kind}_ext = ? WHERE id = ?`).run(ext, stream.id);
+    makePosterCopy(target, posterSmallPath(stream.slug));
+    app.db.prepare("UPDATE streams SET poster_ext = ? WHERE id = ?").run(ext, stream.id);
     audit(app.db, {
       userId: session.user.id,
       username: session.user.username,
-      action: `${kind}_uploaded`,
+      action: "poster_uploaded",
       detail: `${stream.slug}.${ext}`,
       ip: req.ip,
     });
@@ -714,49 +690,38 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/admin/streams/:id/poster", { bodyLimit: 6 * 1024 * 1024 }, (req, reply) =>
-    uploadImage(req, reply, "poster"),
-  );
-  app.post("/api/admin/streams/:id/icon", { bodyLimit: 6 * 1024 * 1024 }, (req, reply) =>
-    uploadImage(req, reply, "icon"),
+    uploadPoster(req, reply),
   );
 
-  for (const kind of ["poster", "icon"] as const) {
-    app.delete(`/api/admin/streams/:id/${kind}`, async (req, reply) => {
-      const session = requireSession(app.db, req, reply);
-      if (!session) return reply;
-      const params = safeParse(IdParams, req.params);
-      if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
-      const stream = getStreamById(app.db, params.data.id);
-      if (!stream) return reply.code(404).send({ error: "not_found" });
-      if (stream.status === "starting" || stream.status === "live") {
-        return reply.code(409).send({ error: "stream_on_air" });
-      }
-      const ext = kind === "poster" ? stream.poster_ext : stream.icon_ext;
-      if (ext) {
+  app.delete("/api/admin/streams/:id/poster", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const params = safeParse(IdParams, req.params);
+    if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
+    const stream = getStreamById(app.db, params.data.id);
+    if (!stream) return reply.code(404).send({ error: "not_found" });
+    if (stream.status === "starting" || stream.status === "live") {
+      return reply.code(409).send({ error: "stream_on_air" });
+    }
+    if (stream.poster_ext) {
+      for (const file of [path.join(uploadsDir(), `${stream.slug}.poster.${stream.poster_ext}`), posterSmallPath(stream.slug)]) {
         try {
-          fs.unlinkSync(path.join(uploadsDir(), `${stream.slug}.${kind}.${ext}`));
+          fs.unlinkSync(file);
         } catch {
           /* already gone */
         }
-        if (kind === "poster") {
-          try {
-            fs.unlinkSync(posterSmallPath(stream.slug));
-          } catch {
-            /* already gone */
-          }
-        }
       }
-      app.db.prepare(`UPDATE streams SET ${kind}_ext = NULL WHERE id = ?`).run(stream.id);
-      audit(app.db, {
-        userId: session.user.id,
-        username: session.user.username,
-        action: `${kind}_removed`,
-        detail: stream.slug,
-        ip: req.ip,
-      });
-      return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
+    }
+    app.db.prepare("UPDATE streams SET poster_ext = NULL WHERE id = ?").run(stream.id);
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "poster_removed",
+      detail: stream.slug,
+      ip: req.ip,
     });
-  }
+    return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
+  });
 
   // --- users ---------------------------------------------------------------
   // Only the admin role manages accounts, and the admin account itself is out

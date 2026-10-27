@@ -12,7 +12,7 @@
  * bandwidth that matters on mobile networks is the top rung, and a third bitrate
  * tier on a 4‑vCPU box is CPU we do not have to waste.
  *
- * Failure behaviour: OBS reconnects, laptops sleep, Wi-Fi drops. FFmpeg exits
+ * Failure behaviour: encoders reconnect, laptops sleep, Wi-Fi drops. FFmpeg exits
  * when its RTMP input closes, so the supervisor relaunches it with a short
  * backoff until the admin stops the stream or the ingest timeout fires.
  */
@@ -58,7 +58,7 @@ export interface PipelineArgsOptions {
 /**
  * Audio-only broadcasts are a first-class mode, not a muted video: one AAC
  * rendition, no video pipeline at all (`-vn`). That matters on the publisher
- * side too — OBS may still send video, and this drops it without paying for a
+ * side too — a publisher may still send video, and this drops it without paying for a
  * scale + x264 ladder.
  */
 

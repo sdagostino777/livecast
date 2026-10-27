@@ -6,9 +6,10 @@
  * than a database server: no extra process to keep alive on the VPS, no
  * connection pool, and a backup is `cp`. It also makes the tests hermetic.
  *
- * The schema is created idempotently at startup. There is no migration runner
- * yet because there is no earlier schema to migrate from; the first time a
- * column changes, add a `schema_version` table and a switch on it.
+ * The schema is created idempotently at startup, and the few changes made since
+ * the first release are applied as guarded steps below: add a column when an
+ * older install lacks it, drop one when the feature behind it is gone. Each step
+ * checks for the column first, so running it twice is harmless.
  */
 import Database from "better-sqlite3";
 import fs from "node:fs";
@@ -52,9 +53,8 @@ export function openDb(file: string): Db {
       status     TEXT NOT NULL DEFAULT 'draft',    -- draft | starting | live | ended
       kind       TEXT NOT NULL DEFAULT 'video',    -- video | audio
       poster_ext TEXT,                             -- jpg | png | webp (file in DATA_DIR/uploads)
-      poster_palette TEXT,
-      poster_overlay INTEGER NOT NULL DEFAULT 0,  -- draw the title over an uploaded image                         -- blue | teal | indigo | slate | plum
-      icon_ext   TEXT,
+      poster_palette TEXT,                        -- blue | teal | indigo | slate | plum
+      poster_overlay INTEGER NOT NULL DEFAULT 0,  -- draw the title over an uploaded image
       record     INTEGER NOT NULL DEFAULT 0,
       created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
       started_at TEXT,
@@ -109,9 +109,6 @@ export function openDb(file: string): Db {
   if (!streamCols.some((c) => c.name === "poster_ext")) {
     db.exec("ALTER TABLE streams ADD COLUMN poster_ext TEXT");
   }
-  if (!streamCols.some((c) => c.name === "icon_ext")) {
-    db.exec("ALTER TABLE streams ADD COLUMN icon_ext TEXT");
-  }
   if (!streamCols.some((c) => c.name === "poster_palette")) {
     db.exec("ALTER TABLE streams ADD COLUMN poster_palette TEXT");
   }
@@ -119,7 +116,30 @@ export function openDb(file: string): Db {
     db.exec("ALTER TABLE streams ADD COLUMN poster_overlay INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Columns that no longer have a feature behind them: the square event icon was
+  // dropped in favour of the install's own logo, and 2FA was removed. Leaving
+  // them behind would be a lie about what the schema supports.
+  dropColumn(db, "streams", "icon_ext");
+  dropColumn(db, "users", "totp_secret");
+  dropColumn(db, "users", "totp_enabled");
+
   return db;
+}
+
+/**
+ * Removes a column that no longer has a feature behind it.
+ *
+ * A leftover column is harmless, a boot failure is not: an install whose SQLite
+ * refuses the operation keeps its data and the app keeps running.
+ */
+function dropColumn(db: Db, table: "streams" | "users", column: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+  } catch {
+    /* older SQLite, or the column is referenced: leave it in place */
+  }
 }
 
 export function audit(db: Db, entry: {
