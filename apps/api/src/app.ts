@@ -77,7 +77,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     reply.header("Referrer-Policy", "no-referrer");
     reply.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; " +
+      // img-src allows blob: for the upload previews the panel builds with
+      // URL.createObjectURL before the file reaches the server.
+      "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; " +
         "style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; " +
         "base-uri 'none'; form-action 'self'",
     );
