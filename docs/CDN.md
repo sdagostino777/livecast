@@ -21,13 +21,13 @@ passes headers through works even with its CORS switch off.
 ## Bunny CDN — the five-minute version
 
 1. **Create a Pull Zone** in the Bunny dashboard: *CDN → Add Pull Zone*.
-   - **Origin URL**: `https://<your-domain>` (for NDX Live: `https://live.ndx-llc.com`)
+   - **Origin URL**: `https://<your-domain>` (for Livecast: `https://live.example.com`)
    - **Name**: something like `live-cdn`
    - Leave "Cache static files" behaviour at its default: Bunny honours the
      origin's `Cache-Control`, which is exactly the policy above.
 2. **Custom hostname + TLS**: Pull Zone → *Hostnames → Add Custom Hostname* →
    `<something>.b-cdn.net` is assigned already; add your own (e.g.
-   `cdn.ndx-llc.com` as a CNAME) and enable **Free SSL** so the player fetches
+   `cdn.example.com` as a CNAME) and enable **Free SSL** so the player fetches
    over HTTPS. A CDN hostname on plain HTTP next to an HTTPS page triggers mixed
    content and the player will refuse.
 3. **Tell the app**: open the panel → **Configurazione** → **CDN (opzionale)** →

@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_LADDER, HlsPipeline, buildFfmpegArgs } from "../src/services/pipeline.js";
+import { DEFAULT_LADDER, HlsPipeline, buildFfmpegArgs, buildFfmpegAudioArgs } from "../src/services/pipeline.js";
 
 describe("buildFfmpegArgs", () => {
   const base = {
@@ -46,6 +46,22 @@ describe("buildFfmpegArgs", () => {
     const rec = buildFfmpegArgs({ ...base, recordFile: "/srv/recordings/x.frag.mp4" });
     expect(rec.join(" ")).toContain("frag_keyframe");
     expect(rec.join(" ")).toContain("/srv/recordings/x.frag.mp4");
+  });
+
+  it("builds audio-only arguments without any video chain", () => {
+    const args = buildFfmpegAudioArgs({ ...base, kind: "audio" });
+    const joined = args.join(" ");
+    expect(joined).toContain("-vn");
+    expect(args[args.indexOf("-var_stream_map") + 1]).toBe("a:0,name:audio");
+    expect(args[args.indexOf("-hls_segment_filename") + 1]).toBe("/srv/hls/slug/audio/seg_%06d.ts");
+    expect(joined).not.toContain("libx264");
+    expect(joined).not.toContain("filter_complex");
+  });
+
+  it("routes the audio kind through buildFfmpegArgs", () => {
+    const args = buildFfmpegArgs({ ...base, kind: "audio" });
+    expect(args.join(" ")).toContain("-vn");
+    expect(args.join(" ")).not.toContain("libx264");
   });
 
   it("follows whatever ladder it is given", () => {
@@ -93,7 +109,7 @@ function makePipeline(outDir: string) {
 describe("HlsPipeline supervisor", () => {
   let dir: string;
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), "ndx-hls-"));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "livecast-hls-"));
     vi.useFakeTimers();
   });
   afterEach(() => {

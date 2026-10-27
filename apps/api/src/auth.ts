@@ -1,5 +1,5 @@
 /**
- * Admin authentication: passwords, sessions, and TOTP.
+ * Authentication: passwords, sessions, and the admin/operator roles.
  *
  * Threat model: the only account is the broadcaster's. If it is taken over, a
  * stranger can push video into the public stream — so password storage is
@@ -16,7 +16,7 @@ import { addHours, newId, nowIso } from "./ids.js";
 export const MIN_PASSWORD_LENGTH = 12;
 
 /** The session cookie. Named so it never collides with the fleet app's cookies. */
-export const SESSION_COOKIE = "ndx_live_sid";
+export const SESSION_COOKIE = "livecast_sid";
 
 export function sessionCookieOptions() {
   return {
@@ -38,7 +38,6 @@ export interface User {
   id: string;
   username: string;
   role: string;
-  totpEnabled: boolean;
 }
 
 export interface Session {
@@ -59,24 +58,31 @@ export async function verifyPassword(passwordHash: string, password: string): Pr
   }
 }
 
-export function getUserByUsername(db: Db, username: string): (User & { passwordHash: string; totpSecret: string | null }) | null {
+export function getUserByUsername(db: Db, username: string): (User & { passwordHash: string }) | null {
   const row = db
-    .prepare(
-      `SELECT id, username, role, totp_enabled, password_hash, totp_secret
-         FROM users WHERE username_key = ?`,
-    )
+    .prepare(`SELECT id, username, role, password_hash FROM users WHERE username_key = ?`)
     .get(username.trim().toLowerCase()) as
-    | { id: string; username: string; role: string; totp_enabled: number; password_hash: string; totp_secret: string | null }
+    | { id: string; username: string; role: string; password_hash: string }
     | undefined;
   if (!row) return null;
   return {
     id: row.id,
     username: row.username,
     role: row.role,
-    totpEnabled: row.totp_enabled === 1,
     passwordHash: row.password_hash,
-    totpSecret: row.totp_secret,
   };
+}
+
+export function listUsers(db: Db): Array<User & { createdAt: string }> {
+  const rows = db
+    .prepare(`SELECT id, username, role, created_at FROM users ORDER BY created_at ASC`)
+    .all() as Array<{ id: string; username: string; role: string; created_at: string }>;
+  return rows.map((r) => ({ id: r.id, username: r.username, role: r.role, createdAt: r.created_at }));
+}
+
+export function deleteUser(db: Db, id: string): void {
+  db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+  db.prepare("DELETE FROM users WHERE id = ?").run(id);
 }
 
 export function createUser(db: Db, username: string, passwordHash: string, role = "admin"): User {
@@ -85,7 +91,7 @@ export function createUser(db: Db, username: string, passwordHash: string, role 
     `INSERT INTO users (id, username, username_key, password_hash, role, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(id, username.trim(), username.trim().toLowerCase(), passwordHash, role, nowIso());
-  return { id, username: username.trim(), role, totpEnabled: false };
+  return { id, username: username.trim(), role };
 }
 
 function sha256(value: string): string {
@@ -116,12 +122,12 @@ export function lookupSession(db: Db, token: string): Session | null {
   if (!token || token.length < 20) return null;
   const row = db
     .prepare(
-      `SELECT s.id, s.expires_at, u.id AS uid, u.username, u.role, u.totp_enabled
+      `SELECT s.id, s.expires_at, u.id AS uid, u.username, u.role
          FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = ?`,
     )
     .get(sha256(token)) as
-    | { id: string; expires_at: string; uid: string; username: string; role: string; totp_enabled: number }
+    | { id: string; expires_at: string; uid: string; username: string; role: string }
     | undefined;
   if (!row) return null;
   if (new Date(row.expires_at).getTime() <= Date.now()) {
@@ -130,7 +136,7 @@ export function lookupSession(db: Db, token: string): Session | null {
   }
   return {
     sessionId: row.id,
-    user: { id: row.uid, username: row.username, role: row.role, totpEnabled: row.totp_enabled === 1 },
+    user: { id: row.uid, username: row.username, role: row.role },
     expiresAt: row.expires_at,
   };
 }

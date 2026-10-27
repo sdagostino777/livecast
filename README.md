@@ -1,11 +1,14 @@
-# NDX Live
+# Livecast
 
-**Self-hostable live streaming platform.** One operator broadcasts from OBS; the
-audience gets a shareable link and a player with play and pause. Adaptive-bitrate
-HLS, a 12-second target latency, and a control plane small enough to read in an
-afternoon — running on a €8 VPS until the audience justifies a CDN.
+**Self-hostable live audio/video streaming.** A small team broadcasts from OBS;
+the audience gets a shareable link and a player with play and pause. Adaptive
+HLS for video, a clean audio-only mode, and a control plane small enough to read
+in an afternoon — running on a €8 VPS until the audience justifies a CDN.
 
-Built as the streaming layer for NDX LLC events. The driving constraint was not
+Fork it, rename it, set your own name in the panel: nothing here is tied to a
+vendor, a domain or an organisation.
+
+Built as the streaming layer for the maintainers events. The driving constraint was not
 features: it was *"the transmission must not fall during the event"* — so the
 code is organised around failure, not around convenience. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break.md).
@@ -13,7 +16,7 @@ code is organised around failure, not around convenience. See
 ![The player — play and pause, nothing else](docs/screenshots/player.png)
 
 *Both screenshots are captures of a live broadcast on production
-(`https://live.ndx-llc.com`), taken by Playwright through a real Chrome instance.*
+(`https://live.example.com`), taken by Playwright through a real Chrome instance.*
 
 ```
  OBS ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
@@ -34,6 +37,8 @@ code is organised around failure, not around convenience. See
 | **MediaMTX for ingest only** | It accepts RTMP and enforces the stream key. The video itself is encoded by FFmpeg into a plain directory of files — the easiest thing to inspect, restart, and put behind a CDN. |
 | **Play/pause only, on purpose** | A live stream has no timeline to seek. Every extra control is another thing that can be wrong on a phone in a crowd. |
 | **No PIN on the link** | By decision: an open transmission. The slug is random and unindexed, which keeps it out of search results without pretending it is access control. |
+| **Two kinds of broadcast** | Video (720/480/360 ladder) and audio-only (128 kbps AAC) share the same pipeline; the audio mode drops any video the publisher sends instead of paying for an encoder chain nobody watches. |
+| **Users, not just an account** | One admin manages accounts; operators can run broadcasts. The admin account itself cannot be deleted or have its password reset by anyone else. |
 | **SQLite** | One operator, a handful of streams. A database server would be a process to keep alive for no benefit. |
 
 ## Quick start (local)
@@ -70,7 +75,7 @@ bash infra/scripts/deploy.sh
 ```
 
 Both scripts are idempotent. The deploy prints the generated admin password once
-and stores it in `/root/.ndx-live-credentials` on the server.
+and stores it in `/root/.livecast-credentials` on the server.
 
 Then: open `https://<domain>/admin`, log in, and copy the RTMP URL the panel
 shows into **OBS → Settings → Stream → Server** (stream key left empty). Create
@@ -82,13 +87,27 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 - **Diretta** — create a broadcast, "Crea e vai in onda", stop it, and copy the
   public link. OBS credentials are masked until revealed (the reveal is audited).
-- **Dirette** — previous broadcasts; each row keeps its link. Deleted rows never
-  own files on disk.
+- **Dirette** — previous broadcasts with their kind (video / audio-only); each
+  row keeps its link. Deleted rows never own files on disk.
+- **Utenti** (admin only) — create operators, reset their passwords, delete them.
+  The admin account row shows "account protetto" and has no actions.
 - **Configurazione** — public URL, **CDN base URL, ingest host/port**: switching
   delivery to a CDN is a URL and a click, no redeploy. "Verifica CDN" probes the
   live manifest through the CDN edge and reports the cache header it saw. The
   step-by-step attach procedure is [`docs/CDN.md`](docs/CDN.md).
-- **Sicurezza** — password change (revokes other sessions) and TOTP 2FA.
+- **Sicurezza** — change your own password (revokes your other sessions).
+
+## Make it yours
+
+- **Name** — Configurazione → *Nome dell'installazione*. It appears in the panel,
+  the player and the page title; no rebuild needed.
+- **Colours** — the palette lives in `apps/web/src/styles.css` (`:root` tokens).
+  The light theme and the dark player are two gradients and a handful of
+  variables, not a framework.
+- **Install name** — `APP_NAME=yourname bash infra/scripts/deploy.sh --provision`
+  sets the service user, directory and systemd units for a fresh server.
+- **Repo** — rename it freely; the only files that mention "livecast" are the
+  package names, the default `APP_NAME`, and the fallback brand string.
 
 ## Configuration
 
@@ -98,10 +117,11 @@ a broadcast from the panel and press play on `/live/<slug>`.
 | `DATA_DIR` | `./data` | SQLite database, HLS output, recordings. |
 | `PUBLIC_URL` | `http://localhost:4100` | Canonical origin: page links and the Origin check. |
 | `INGEST_HOST` / `INGEST_PORT` | host from `PUBLIC_URL` / `1935` | What OBS connects to (editable at runtime in the panel). |
-| `PUBLISH_USER` / `PUBLISH_PASS` | `ndx` / — | Broadcaster credentials shown in the panel, enforced by MediaMTX. |
+| `PUBLISH_USER` / `PUBLISH_PASS` | `publisher` / — | Broadcaster credentials shown in the panel, enforced by MediaMTX. |
 | `MEDIAMTX_READ_USER` / `_PASS` | — | Loopback credentials FFmpeg uses to read the stream. |
 | `COOKIE_SECURE` | `false` in dev, `true` in production | Session cookies over TLS only. |
 | `INGEST_WAIT_SECONDS` | `600` | How long a stream waits for OBS before ending itself. |
+| `BRAND_NAME` | `Livecast` | Display name until one is saved in the panel. |
 
 Runtime settings (public URL, CDN, ingest host/port) live in the database,
 seeded from `PUBLIC_URL`/`INGEST_*` on first boot and editable from the panel.
@@ -125,7 +145,7 @@ and the operator runbook (go-live checklist, CDN attach, troubleshooting) is
 
 ```bash
 pnpm typecheck        # tsc, both packages
-pnpm test             # 33 tests: TOTP vectors, FFmpeg args, supervisor, auth, routes
+pnpm test             # 32 tests: FFmpeg args (video + audio), supervisor, auth, users, routes
 pnpm build            # api → dist, web → dist
 ```
 
@@ -154,4 +174,4 @@ MIT — see [`LICENSE`](LICENSE).
 
 ---
 
-*Built by [Simone D'Agostino](https://github.com/sdagostino777) for NDX LLC.*
+*Built by [Simone D'Agostino](https://github.com/sdagostino777) for the maintainers.*

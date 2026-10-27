@@ -9,7 +9,7 @@ let dir: string;
 let db: Db;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "ndx-settings-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "livecast-settings-"));
   db = openDb(path.join(dir, "db.sqlite"));
 });
 
@@ -30,19 +30,19 @@ describe("SettingsStore", () => {
 
   it("persists an update and reloads it in a fresh store", () => {
     const store = new SettingsStore(db);
-    store.update({ cdnBaseUrl: "https://cdn.ndx.example", ingestPort: 19350 });
-    expect(store.hlsBaseUrl()).toBe("https://cdn.ndx.example");
+    store.update({ cdnBaseUrl: "https://cdn.example", ingestPort: 19350 });
+    expect(store.hlsBaseUrl()).toBe("https://cdn.example");
 
     const reloaded = new SettingsStore(db);
-    expect(reloaded.get().cdnBaseUrl).toBe("https://cdn.ndx.example");
+    expect(reloaded.get().cdnBaseUrl).toBe("https://cdn.example");
     expect(reloaded.get().ingestPort).toBe(19350);
   });
 
   it("trims trailing slashes so URLs concatenate cleanly", () => {
     const store = new SettingsStore(db);
-    store.update({ publicBaseUrl: "https://live.ndx-llc.com/", cdnBaseUrl: "https://cdn.ndx-llc.com//" });
-    expect(store.get().publicBaseUrl).toBe("https://live.ndx-llc.com");
-    expect(store.hlsBaseUrl()).toBe("https://cdn.ndx-llc.com");
+    store.update({ publicBaseUrl: "https://live.example.com/", cdnBaseUrl: "https://cdn.example.com//" });
+    expect(store.get().publicBaseUrl).toBe("https://live.example.com");
+    expect(store.hlsBaseUrl()).toBe("https://cdn.example.com");
   });
 
   it("rejects an invalid URL and a CDN on the same origin as the app", () => {
@@ -54,8 +54,8 @@ describe("SettingsStore", () => {
 
   it("returns to origin delivery when the CDN is cleared", () => {
     const store = new SettingsStore(db);
-    store.update({ publicBaseUrl: "https://live.ndx-llc.com", cdnBaseUrl: "https://cdn.ndx-llc.com" });
+    store.update({ publicBaseUrl: "https://live.example.com", cdnBaseUrl: "https://cdn.example.com" });
     store.update({ cdnBaseUrl: "" });
-    expect(store.hlsBaseUrl()).toBe("https://live.ndx-llc.com");
+    expect(store.hlsBaseUrl()).toBe("https://live.example.com");
   });
 });

@@ -35,10 +35,13 @@ export const DEFAULT_LADDER: readonly LadderRung[] = [
   { name: "360", height: 360, videoBitrateKbps: 800, maxrateKbps: 1000, bufsizeKbps: 1600, audioBitrateKbps: 64 },
 ];
 
+export type StreamKind = "video" | "audio";
+
 export interface PipelineArgsOptions {
   ffmpegBin: string;
   inputUrl: string;
   outDir: string;
+  kind: StreamKind;
   segmentSeconds: number;
   listSize: number;
   recordFile: string | null;
@@ -50,7 +53,67 @@ export interface PipelineArgsOptions {
  * part of this system most likely to be wrong after an FFmpeg upgrade, so they
  * are asserted in tests and exercised by a smoke script rather than eyeballed.
  */
+/**
+ * Audio-only broadcasts are a first-class mode, not a muted video: one AAC
+ * rendition, no video pipeline at all (`-vn`). That matters on the publisher
+ * side too — OBS may still send video, and this drops it without paying for a
+ * scale + x264 ladder.
+ */
+export function buildFfmpegAudioArgs(opts: PipelineArgsOptions): string[] {
+  const args: string[] = [
+    "-hide_banner",
+    "-nostdin",
+    "-loglevel",
+    "warning",
+    "-fflags",
+    "+genpts",
+    "-i",
+    opts.inputUrl,
+    "-vn",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ac",
+    "2",
+    "-ar",
+    "48000",
+    "-f",
+    "hls",
+    "-hls_time",
+    String(opts.segmentSeconds),
+    "-hls_list_size",
+    String(opts.listSize),
+    "-hls_flags",
+    "delete_segments+independent_segments+program_date_time",
+    "-hls_segment_filename",
+    path.join(opts.outDir, "audio", "seg_%06d.ts"),
+    "-master_pl_name",
+    "master.m3u8",
+    "-var_stream_map",
+    "a:0,name:audio",
+    path.join(opts.outDir, "%v", "index.m3u8"),
+  ];
+
+  if (opts.recordFile) {
+    args.push(
+      "-map",
+      "0:a:0",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-f",
+      "mp4",
+      opts.recordFile,
+    );
+  }
+  return args;
+}
+
 export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
+  if (opts.kind === "audio") return buildFfmpegAudioArgs(opts);
+
   const ladder = opts.ladder ?? DEFAULT_LADDER;
   const record = Boolean(opts.recordFile);
   // One extra branch of the split when recording: FFmpeg refuses to reuse a
@@ -221,9 +284,8 @@ export class HlsPipeline implements PipelineApi {
   start(opts: PipelineStartOptions, callbacks: PipelineCallbacks): void {
     if (this.isActive()) throw new Error("pipeline already running");
 
-    fs.mkdirSync(path.join(opts.outDir, "720"), { recursive: true });
-    fs.mkdirSync(path.join(opts.outDir, "480"), { recursive: true });
-    fs.mkdirSync(path.join(opts.outDir, "360"), { recursive: true });
+    const rungs = opts.kind === "audio" ? ["audio"] : ["720", "480", "360"];
+    for (const rung of rungs) fs.mkdirSync(path.join(opts.outDir, rung), { recursive: true });
     if (opts.recordFile) fs.mkdirSync(path.dirname(opts.recordFile), { recursive: true });
 
     this.state = "starting";
@@ -262,6 +324,7 @@ export class HlsPipeline implements PipelineApi {
       ffmpegBin: meta.opts.ffmpegBin,
       inputUrl: meta.opts.inputUrl,
       outDir: meta.opts.outDir,
+      kind: meta.opts.kind,
       segmentSeconds: meta.opts.segmentSeconds,
       listSize: meta.opts.listSize,
       recordFile: meta.opts.recordFile,
@@ -312,9 +375,10 @@ export class HlsPipeline implements PipelineApi {
   lastExit: { code: number | null; signal: string | null; stderrTail: string } | null = null;
 
   /** Segment names currently on disk, across all rungs: "720/seg_000012.ts" etc. */
-  private listSegments(outDir: string): Set<string> {
+  private listSegments(outDir: string, kind: StreamKind): Set<string> {
     const names = new Set<string>();
-    for (const rung of ["720", "480", "360"]) {
+    const rungs = kind === "audio" ? ["audio"] : ["720", "480", "360"];
+    for (const rung of rungs) {
       try {
         for (const file of fs.readdirSync(path.join(outDir, rung))) {
           if (file.endsWith(".ts")) names.add(`${rung}/${file}`);
@@ -337,7 +401,7 @@ export class HlsPipeline implements PipelineApi {
     const meta = this.meta;
     if (!meta) return;
 
-    const segments = this.listSegments(meta.opts.outDir);
+    const segments = this.listSegments(meta.opts.outDir, meta.opts.kind);
 
     if (this.state === "starting") {
       if (segments.size === 0) return;

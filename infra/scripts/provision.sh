@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# NDX Live — VPS provisioning.
+# Livecast — VPS provisioning.
 #
 # Run once on a fresh Ubuntu LTS VPS as root:
 #     bash infra/scripts/provision.sh
@@ -16,14 +16,19 @@
 #
 set -euo pipefail
 
-APP_DOMAIN="${APP_DOMAIN:-live.ndx-llc.com}"
-APP_USER="${APP_USER:-ndxlive}"
-APP_DIR="${APP_DIR:-/srv/ndx-live}"
+# The install name decides the service user, the install directory and the
+# systemd units. Export APP_NAME=something to rebrand a deployment.
+APP_NAME="${APP_NAME:-livecast}"
+APP_DOMAIN="${APP_DOMAIN:-live.example.com}"
+APP_USER="${APP_USER:-${APP_NAME}}"
+APP_DIR="${APP_DIR:-/srv/${APP_NAME}}"
+APP_UNIT="${APP_NAME}.service"
+MEDIA_UNIT="${APP_NAME}-mediamtx.service"
 PORT="${PORT:-4100}"
 INGEST_PORT="${INGEST_PORT:-1935}"
 MEDIAMTX_VERSION="${MEDIAMTX_VERSION:-v1.21.3}"
-LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-info@ndx-llc.com}"
-CREDENTIALS_FILE="/root/.ndx-live-credentials"
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-admin@example.com}"
+CREDENTIALS_FILE="/root/.livecast-credentials"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 ok() { printf '\033[1;32m  ok  %s\033[0m\n' "$*"; }
@@ -54,7 +59,7 @@ else
   ok "system user ${APP_USER} already exists"
 fi
 # The app directory is owned by the service user but written by root at deploy
-# time (rsync), so it also needs group write: root:ndxlive with 775.
+# time (rsync), so it also needs group write: root:livecast with 775.
 install -d -o "${APP_USER}" -g "${APP_USER}" -m 775 "${APP_DIR}" "${APP_DIR}/bin" "${APP_DIR}/data" "${APP_DIR}/data/hls" "${APP_DIR}/data/recordings"
 ok "directories under ${APP_DIR}"
 
@@ -63,9 +68,9 @@ ok "directories under ${APP_DIR}"
 log "Credentials"
 if [ ! -f "${CREDENTIALS_FILE}" ]; then
   {
-    echo "PUBLISH_USER=ndx"
+    echo "PUBLISH_USER=publisher"
     echo "PUBLISH_PASS=$(openssl rand -base64 36 | tr -dc 'A-Za-z0-9' | cut -c1-32)"
-    echo "READER_USER=ndx-reader"
+    echo "READER_USER=reader"
     echo "READER_PASS=$(openssl rand -base64 36 | tr -dc 'A-Za-z0-9' | cut -c1-32)"
   } > "${CREDENTIALS_FILE}"
   chmod 600 "${CREDENTIALS_FILE}"
@@ -107,6 +112,9 @@ render() {
       -e "s/__READER_USER__/${READER_USER}/g" \
       -e "s/__READER_PASS__/${READER_PASS}/g" \
       -e "s/__DOMAIN__/${APP_DOMAIN}/g" \
+      -e "s/__APP_NAME__/${APP_NAME}/g" \
+      -e "s/__APP_USER__/${APP_USER}/g" \
+      -e "s|__APP_DIR__|${APP_DIR}|g" \
       -e "s/__NODE__/${NODE_BIN//\//\\/}/g" \
       "$1"
 }
@@ -124,9 +132,9 @@ if ! cmp -s "${MEDIAMTX_YML}.new" "${MEDIAMTX_YML}" 2>/dev/null; then
   ok "rendered ${MEDIAMTX_YML} (changed)"
   # Only restart on an actual change: re-running provisioning during an event
   # must not drop the ingest connection for the sake of idempotence.
-  if systemctl is-active --quiet ndx-live-mediamtx; then
-    systemctl restart ndx-live-mediamtx
-    ok "ndx-live-mediamtx restarted to pick up the new config"
+  if systemctl is-active --quiet "${MEDIA_UNIT}"; then
+    systemctl restart "${MEDIA_UNIT}"
+    ok "livecast-mediamtx restarted to pick up the new config"
   fi
 else
   rm -f "${MEDIAMTX_YML}.new"
@@ -136,7 +144,7 @@ fi
 if [ ! -f "${APP_DIR}/app/.env" ]; then
   install -d -o "${APP_USER}" -g "${APP_USER}" -m 775 "${APP_DIR}/app"
   cat > "${APP_DIR}/app/.env" <<EOF
-# NDX Live — written once by provision.sh, edited by hand if needed.
+# Livecast — written once by provision.sh, edited by hand if needed.
 NODE_ENV=production
 PORT=${PORT}
 HOST=127.0.0.1
@@ -164,27 +172,27 @@ fi
 
 log "systemd units"
 SYSTEMD_SRC="$(dirname "$0")/../systemd"
-[ -f "${SYSTEMD_SRC}/ndx-live.service" ] || SYSTEMD_SRC="${APP_DIR}/app/infra/systemd"
-[ -f "${SYSTEMD_SRC}/ndx-live.service" ] || fail "systemd units not found"
+[ -f "${SYSTEMD_SRC}/app.service.tpl" ] || SYSTEMD_SRC="${APP_DIR}/app/infra/systemd"
+[ -f "${SYSTEMD_SRC}/app.service.tpl" ] || fail "systemd unit templates not found"
 
-render "${SYSTEMD_SRC}/ndx-live.service" > /etc/systemd/system/ndx-live.service
-install -m 644 "${SYSTEMD_SRC}/ndx-live-mediamtx.service" /etc/systemd/system/ndx-live-mediamtx.service
+render "${SYSTEMD_SRC}/app.service.tpl" > "/etc/systemd/system/${APP_UNIT}"
+render "${SYSTEMD_SRC}/mediamtx.service.tpl" > "/etc/systemd/system/${MEDIA_UNIT}"
 systemctl daemon-reload
-systemctl enable --now ndx-live-mediamtx.service >/dev/null
-ok "ndx-live-mediamtx enabled and running"
-systemctl enable ndx-live.service >/dev/null
+systemctl enable --now "${MEDIA_UNIT}" >/dev/null
+ok "${MEDIA_UNIT} enabled and running"
+systemctl enable "${APP_UNIT}" >/dev/null
 if [ -f "${APP_DIR}/app/apps/api/dist/main.js" ]; then
-  systemctl restart ndx-live.service
-  ok "ndx-live restarted"
+  systemctl restart "${APP_UNIT}"
+  ok "${APP_UNIT} restarted"
 else
-  warn "app not deployed yet — run deploy.sh, then 'systemctl start ndx-live'"
+  warn "app not deployed yet — run deploy.sh, then 'systemctl start ${APP_UNIT}'"
 fi
 
 # --- 6. Firewall -----------------------------------------------------------
 
 log "Firewall"
 if command -v ufw >/dev/null; then
-  ufw allow "${INGEST_PORT}/tcp" comment 'NDX Live RTMP ingest' >/dev/null
+  ufw allow "${INGEST_PORT}/tcp" comment 'Livecast RTMP ingest' >/dev/null
   ok "ufw allows ${INGEST_PORT}/tcp"
 else
   warn "ufw not installed — make sure ${INGEST_PORT}/tcp is reachable"
@@ -235,7 +243,7 @@ fi
 
 # --- 8. Summary ------------------------------------------------------------
 
-printf '\n\033[1;32mNDX Live provisioned.\033[0m\n\n'
+printf '\n\033[1;32mLivecast provisioned.\033[0m\n\n'
 printf '  App dir        %s\n' "${APP_DIR}"
 printf '  Domain         https://%s\n' "${APP_DOMAIN}"
 printf '  Ingest (OBS)   rtmp://%s:%s/live\n' "${APP_DOMAIN}" "${INGEST_PORT}"

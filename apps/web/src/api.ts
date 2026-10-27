@@ -15,11 +15,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.body !== undefined && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
-  const res = await fetch(path, {
-    ...init,
-    headers,
-    credentials: "same-origin",
-  });
+  const res = await fetch(path, { ...init, headers, credentials: "same-origin" });
   if (!res.ok) {
     let body: { error?: string } = {};
     try {
@@ -42,8 +38,17 @@ export const api = {
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
+export type Role = "admin" | "operator";
+
 export interface Me {
-  user: { username: string; role: string; totpEnabled: boolean };
+  user: { username: string; role: Role };
+}
+
+export interface PublicUser {
+  id: string;
+  username: string;
+  role: Role;
+  createdAt: string;
 }
 
 export interface StreamView {
@@ -51,6 +56,7 @@ export interface StreamView {
   slug: string;
   title: string;
   status: "draft" | "starting" | "live" | "ended";
+  kind: "video" | "audio";
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -80,6 +86,7 @@ export interface Overview {
 }
 
 export interface Settings {
+  brandName: string;
   publicBaseUrl: string;
   cdnBaseUrl: string;
   ingestHost: string;
@@ -94,4 +101,15 @@ export interface CdnTestResult {
   status?: number;
   headers?: Record<string, string | null>;
   error?: string;
+}
+
+export interface LiveMeta {
+  slug: string;
+  title: string;
+  status: "starting" | "live" | "ended";
+  kind: "video" | "audio";
+  startedAt: string | null;
+  endedAt: string | null;
+  hlsUrl: string;
+  pageUrl: string;
 }

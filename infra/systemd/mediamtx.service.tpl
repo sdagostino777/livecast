@@ -1,13 +1,13 @@
 [Unit]
-Description=NDX Live — MediaMTX RTMP ingest
+Description=__APP_NAME__ — MediaMTX RTMP ingest
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=ndxlive
-Group=ndxlive
-ExecStart=/srv/ndx-live/bin/mediamtx /srv/ndx-live/mediamtx.yml
+User=__APP_USER__
+Group=__APP_USER__
+ExecStart=__APP_DIR__/bin/mediamtx __APP_DIR__/mediamtx.yml
 Restart=always
 RestartSec=2
 # A broadcaster reconnect burst opens many short-lived connections; the default

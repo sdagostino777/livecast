@@ -93,6 +93,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   app.get("/api/health", async () => ({ ok: true, time: new Date().toISOString() }));
 
+  // Public branding: the login page and the player need the name before there
+  // is a session, and it is not a secret.
+  app.get("/api/brand", async () => ({ name: app.settings.get().brandName }));
+
   await app.register(authRoutes);
   await app.register(adminRoutes);
   await app.register(liveRoutes);

@@ -1,16 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, ApiError } from "../api";
-import { VideoPlayer } from "../components/VideoPlayer";
-
-interface LiveMeta {
-  slug: string;
-  title: string;
-  status: "starting" | "live" | "ended";
-  startedAt: string | null;
-  endedAt: string | null;
-  hlsUrl: string;
-  pageUrl: string;
-}
+import { api, ApiError, LiveMeta } from "../api";
+import { useBrand } from "../brand";
+import { MediaPlayer } from "../components/MediaPlayer";
+import { BrandMark } from "../components/BrandMark";
 
 /**
  * The viewer page. It polls the status endpoint because a shared link can be
@@ -18,6 +10,7 @@ interface LiveMeta {
  * when the show starts.
  */
 export function Player({ slug }: { slug: string }) {
+  const brand = useBrand();
   const [meta, setMeta] = useState<LiveMeta | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
@@ -52,7 +45,7 @@ export function Player({ slug }: { slug: string }) {
   if (notFound) {
     return (
       <div className="player-page">
-        <div className="player-missing">
+        <div className="player-missing" style={{ margin: "auto", padding: 24 }}>
           <p className="player-message-title">Diretta non trovata</p>
           <p className="muted">Controlla il link che ti hanno inviato.</p>
         </div>
@@ -63,16 +56,17 @@ export function Player({ slug }: { slug: string }) {
   return (
     <div className="player-page">
       <main className="player-main">
-        <VideoPlayer
+        <MediaPlayer
           hlsUrl={meta?.hlsUrl ?? null}
+          kind={meta?.kind ?? "video"}
           live={meta?.status === "live"}
           ended={meta?.status === "ended"}
           title={meta?.title ?? ""}
+          brand={brand}
         />
-        {unreachable && <p className="muted small center">Riconnessione al server…</p>}
       </main>
       <footer className="player-footer">
-        <span className="muted small">NDX Live</span>
+        <span className="small">{unreachable ? "Riconnessione al server…" : meta ? <BrandMark name={brand} size={26} /> : brand}</span>
       </footer>
     </div>
   );

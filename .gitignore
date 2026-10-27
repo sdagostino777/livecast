@@ -8,3 +8,4 @@ data/
 .DS_Store
 .vite/
 *.tsbuildinfo
+.deploy.env

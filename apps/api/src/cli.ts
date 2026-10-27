@@ -3,7 +3,6 @@
  *
  *   node --env-file=.env dist/cli.js create-admin --username admin
  *   node --env-file=.env dist/cli.js reset-password --username admin
- *   node --env-file=.env dist/cli.js totp-disable --username admin
  *
  * Passwords are never required on the command line: `--password` exists for
  * automation that already keeps the secret out of argv, everything else gets a
@@ -11,14 +10,14 @@
  */
 import { randomBytes } from "node:crypto";
 import { dbFile } from "./config.js";
-import { destroyAllSessions, createUser, getUserByUsername, hashPassword, setPassword, setTotpSecret } from "./auth.js";
+import { destroyAllSessions, createUser, getUserByUsername, hashPassword, setPassword } from "./auth.js";
 import { openDb } from "./db.js";
 import { MIN_PASSWORD_LENGTH } from "./auth.js";
 
 const USAGE = `Usage:
   cli.js create-admin     --username <name> [--password <pass>]
   cli.js reset-password   --username <name> [--password <pass>]
-  cli.js totp-disable     --username <name>`;
+`;
 
 function parseFlags(argv: string[]): { command: string; flags: Record<string, string | true> } {
   const [command, ...rest] = argv;
@@ -83,13 +82,6 @@ switch (command) {
     destroyAllSessions(db, user.id);
     console.log(`ADMIN_PASSWORD=${pw}`);
     console.log(`password reset for "${user.username}" — all sessions invalidated`);
-    break;
-  }
-  case "totp-disable": {
-    const user = getUserByUsername(db, username);
-    if (!user) fail(`no such user: ${username}`);
-    setTotpSecret(db, user.id, null, false);
-    console.log(`TOTP disabled for "${user.username}"`);
     break;
   }
   default:

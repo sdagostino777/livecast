@@ -14,7 +14,7 @@ try {
   await app.listen({ port: config.port, host: config.host });
   app.log.info(
     { port: config.port, host: config.host, publicUrl: config.publicUrl, dataDir: config.dataDir },
-    "ndx-live listening",
+    "livecast listening",
   );
 } catch (err) {
   app.log.error(err);

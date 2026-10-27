@@ -1,5 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, CdnTestResult, Me, Overview, Settings, StreamView } from "../api";
+import { api, ApiError, CdnTestResult, Me, Overview, PublicUser, Settings, StreamView } from "../api";
+import { useBrand } from "../brand";
+import { BrandMark } from "../components/BrandMark";
 import { copyToClipboard, formatDate, formatTime, navigate } from "../router";
 
 function friendlyError(err: unknown): string {
@@ -8,7 +10,7 @@ function friendlyError(err: unknown): string {
       case 401:
         return "Sessione scaduta: accedi di nuovo.";
       case 403:
-        return "Operazione non consentita.";
+        return "Operazione riservata all'amministratore.";
       case 404:
         return "Elemento non trovato.";
       case 409:
@@ -22,18 +24,24 @@ function friendlyError(err: unknown): string {
   return "Impossibile contattare il server.";
 }
 
+function kindLabel(kind: "video" | "audio"): string {
+  return kind === "audio" ? "Solo audio" : "Video";
+}
+
 function statusLabel(ov: Overview | null): string {
   if (!ov) return "…";
   if (!ov.stream) return "Offline";
-  if (ov.stream.status === "starting") return ov.ingest.ready ? "Preparazione video…" : "In attesa di OBS";
+  if (ov.stream.status === "starting") return ov.ingest.ready ? "Preparazione…" : "In attesa di OBS";
   if (ov.stream.status === "live") return "In onda";
   return "Terminata";
 }
 
 export function Admin() {
+  const brand = useBrand();
   const [me, setMe] = useState<Me["user"] | null>(null);
   const [ov, setOv] = useState<Overview | null>(null);
   const [streams, setStreams] = useState<StreamView[]>([]);
+  const [users, setUsers] = useState<PublicUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,12 +53,19 @@ export function Admin() {
     toastTimer.current = window.setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (role?: "admin" | "operator") => {
     try {
-      const [o, s] = await Promise.all([api.get<Overview>("/api/admin/overview"), api.get<{ streams: StreamView[] }>("/api/admin/streams")]);
-      setOv(o);
-      setStreams(s.streams);
+      const [overview, streamList] = await Promise.all([
+        api.get<Overview>("/api/admin/overview"),
+        api.get<{ streams: StreamView[] }>("/api/admin/streams"),
+      ]);
+      setOv(overview);
+      setStreams(streamList.streams);
       setError(null);
+      if (role === "admin") {
+        const userList = await api.get<{ users: PublicUser[] }>("/api/admin/users");
+        setUsers(userList.users);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         navigate("/login", true);
@@ -64,10 +79,10 @@ export function Admin() {
     let alive = true;
     (async () => {
       try {
-        const me = await api.get<Me>("/api/auth/me");
+        const who = await api.get<Me>("/api/auth/me");
         if (!alive) return;
-        setMe(me.user);
-        await refresh();
+        setMe(who.user);
+        await refresh(who.user.role);
       } catch {
         if (alive) navigate("/login", true);
       }
@@ -79,7 +94,7 @@ export function Admin() {
 
   useEffect(() => {
     if (!me) return;
-    const timer = window.setInterval(() => void refresh(), 5000);
+    const timer = window.setInterval(() => void refresh(me.role), 5000);
     return () => window.clearInterval(timer);
   }, [me, refresh]);
 
@@ -88,7 +103,7 @@ export function Admin() {
     setError(null);
     try {
       await fn();
-      await refresh();
+      await refresh(me?.role);
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -96,10 +111,16 @@ export function Admin() {
     }
   }
 
-  async function createAndStart(title: string, record: boolean) {
+  async function createAndStart(title: string, kind: "video" | "audio", record: boolean) {
     await act(async () => {
-      const created = await api.post<{ stream: StreamView }>("/api/admin/streams", { title, record });
+      const created = await api.post<{ stream: StreamView }>("/api/admin/streams", { title, kind, record });
       await api.post(`/api/admin/streams/${created.stream.id}/start`);
+    });
+  }
+
+  async function startStream(id: string) {
+    await act(async () => {
+      await api.post(`/api/admin/streams/${id}/start`);
     });
   }
 
@@ -111,7 +132,7 @@ export function Admin() {
   }
 
   async function deleteStream(id: string) {
-    if (!window.confirm("Eliminare questa diretta dalle registrazioni del pannello?")) return;
+    if (!window.confirm("Eliminare questa diretta dai registri del pannello?")) return;
     await act(async () => {
       await api.del(`/api/admin/streams/${id}`);
       notify("Diretta eliminata.");
@@ -139,13 +160,12 @@ export function Admin() {
   return (
     <div className="admin">
       <header className="admin-top">
-        <div className="brand">
-          <span className="dot" aria-hidden />
-          NDX <b>Live</b>
-          <span className="muted small">pannello</span>
-        </div>
+        <BrandMark name={brand} />
         <div className="admin-user">
-          <span className="muted small">{me.username}</span>
+          <span className="small">
+            {me.username}
+            {me.role === "admin" && <span className="pill" style={{ marginLeft: 8 }}>admin</span>}
+          </span>
           <button className="btn btn-ghost btn-small" onClick={logout}>
             Esci
           </button>
@@ -166,7 +186,9 @@ export function Admin() {
             <div className="row-between">
               <div>
                 <p className="stream-title">{active.title}</p>
-                <p className="muted small mono">{active.slug}</p>
+                <p className="muted small mono">
+                  {active.slug} · {kindLabel(active.kind)}
+                </p>
               </div>
               <div className="row">
                 <button
@@ -182,8 +204,7 @@ export function Admin() {
             </div>
 
             <p className="muted small">
-              In onda dalle {formatTime(active.startedAt)} ·{" "}
-              {active.record ? "registrazione attiva" : "nessuna registrazione"}
+              In onda dalle {formatTime(active.startedAt)} · {active.record ? "registrazione attiva" : "nessuna registrazione"}
             </p>
 
             <ObsPanel ov={ov} />
@@ -208,6 +229,7 @@ export function Admin() {
             <thead>
               <tr>
                 <th>Titolo</th>
+                <th>Tipo</th>
                 <th>Stato</th>
                 <th>Creata</th>
                 <th aria-label="azioni" />
@@ -221,21 +243,16 @@ export function Admin() {
                     <br />
                     <span className="muted small mono">{s.slug}</span>
                   </td>
+                  <td className="small">{kindLabel(s.kind)}</td>
                   <td>
-                    <span className={`pill ${s.status}`}>{s.status === "live" ? "In onda" : s.status === "starting" ? "Avvio" : s.status === "ended" ? "Terminata" : "Bozza"}</span>
+                    <span className={`pill ${s.status}`}>
+                      {s.status === "live" ? "In onda" : s.status === "starting" ? "Avvio" : s.status === "ended" ? "Terminata" : "Bozza"}
+                    </span>
                   </td>
                   <td className="muted small">{formatDate(s.createdAt)}</td>
                   <td className="cell-actions">
                     {!active && (s.status === "draft" || s.status === "ended") && (
-                      <button
-                        className="btn btn-primary btn-small"
-                        disabled={busy}
-                        onClick={() =>
-                          void act(async () => {
-                            await api.post(`/api/admin/streams/${s.id}/start`);
-                          })
-                        }
-                      >
+                      <button className="btn btn-primary btn-small" disabled={busy} onClick={() => void startStream(s.id)}>
                         Vai in onda
                       </button>
                     )}
@@ -258,20 +275,53 @@ export function Admin() {
         )}
       </section>
 
-      <SettingsPanel />
-      <SecurityPanel me={me} onMeChanged={setMe} notify={notify} />
+      {me.role === "admin" && (
+        <UsersPanel
+          users={users}
+          busy={busy}
+          onCreate={(username, password) =>
+            act(async () => {
+              await api.post("/api/admin/users", { username, password });
+              notify("Utente creato.");
+            })
+          }
+          onResetPassword={(id, password) =>
+            act(async () => {
+              await api.post(`/api/admin/users/${id}/password`, { password });
+              notify("Password aggiornata per l'utente.");
+            })
+          }
+          onDelete={(id) => {
+            if (!window.confirm("Eliminare questo utente?")) return;
+            void act(async () => {
+              await api.del(`/api/admin/users/${id}`);
+              notify("Utente eliminato.");
+            });
+          }}
+        />
+      )}
+
+      <SettingsPanel notify={notify} />
+      <SecurityPanel notify={notify} />
     </div>
   );
 }
 
-function NewStreamForm({ disabled, onCreate }: { disabled: boolean; onCreate: (title: string, record: boolean) => Promise<void> }) {
+function NewStreamForm({
+  disabled,
+  onCreate,
+}: {
+  disabled: boolean;
+  onCreate: (title: string, kind: "video" | "audio", record: boolean) => Promise<void>;
+}) {
   const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<"video" | "audio">("video");
   const [record, setRecord] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!title.trim()) return;
-    await onCreate(title.trim(), record);
+    await onCreate(title.trim(), kind, record);
     setTitle("");
   }
 
@@ -284,6 +334,16 @@ function NewStreamForm({ disabled, onCreate }: { disabled: boolean; onCreate: (t
         maxLength={120}
         onChange={(e) => setTitle(e.target.value)}
       />
+      <div className="choice" role="radiogroup" aria-label="Tipo di trasmissione">
+        <label>
+          <input type="radio" name="kind" checked={kind === "video"} onChange={() => setKind("video")} />
+          Video
+        </label>
+        <label>
+          <input type="radio" name="kind" checked={kind === "audio"} onChange={() => setKind("audio")} />
+          Solo audio
+        </label>
+      </div>
       <label className="check">
         <input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} />
         Registra
@@ -322,23 +382,17 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
         {!ov.ingest.reachable && <span className="muted small">(server media non raggiungibile)</span>}
       </div>
 
-      <p className="muted small">
+      <p className="small">
         In OBS: <b>Server</b> = l'URL completo con credenziali (pulsante sotto), <b>Stream Key</b> vuota.
       </p>
       <p className="muted small mono ellipsis">Base: {ov.ingest.server}</p>
-      <div className="code-row">
-        <code className="code">{ov.ingest.server}</code>
-        <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(ov.ingest.server).then(() => undefined)}>
-          Copia
-        </button>
-      </div>
 
       {revealed ? (
         <>
           <p className="muted small">URL completo con credenziali (incollalo in OBS):</p>
           <div className="code-row">
             <code className="code">{revealed.server}</code>
-            <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.server).then(() => undefined)}>
+            <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.server)}>
               Copia
             </button>
           </div>
@@ -358,7 +412,145 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
   );
 }
 
-function SettingsPanel() {
+function UsersPanel({
+  users,
+  busy,
+  onCreate,
+  onResetPassword,
+  onDelete,
+}: {
+  users: PublicUser[];
+  busy: boolean;
+  onCreate: (username: string, password: string) => Promise<void>;
+  onResetPassword: (id: string, password: string) => Promise<void>;
+  onDelete: (id: string) => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [resetFor, setResetFor] = useState<string | null>(null);
+  const [resetPw, setResetPw] = useState("");
+
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    if (!username.trim() || password.length < 12) return;
+    await onCreate(username.trim(), password);
+    setUsername("");
+    setPassword("");
+  }
+
+  async function reset(event: FormEvent, id: string) {
+    event.preventDefault();
+    if (resetPw.length < 12) return;
+    await onResetPassword(id, resetPw);
+    setResetFor(null);
+    setResetPw("");
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Utenti</h2>
+        <span className="muted small">{users.length}</span>
+      </div>
+
+      <form className="user-form" onSubmit={create}>
+        <label className="field">
+          <span>Nuovo utente</span>
+          <input
+            className="input"
+            placeholder="nome utente"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="off"
+          />
+        </label>
+        <label className="field">
+          <span>Password (min. 12)</span>
+          <input
+            className="input"
+            type="password"
+            placeholder="password iniziale"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+        </label>
+        <button className="btn btn-primary" type="submit" disabled={busy || !username.trim() || password.length < 12}>
+          Crea utente
+        </button>
+      </form>
+
+      <table className="table" style={{ marginTop: 16 }}>
+        <thead>
+          <tr>
+            <th>Utente</th>
+            <th>Ruolo</th>
+            <th>Creato</th>
+            <th aria-label="azioni" />
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) =>
+            resetFor === u.id ? (
+              <tr key={u.id}>
+                <td colSpan={4}>
+                  <form className="row wrap" onSubmit={(e) => void reset(e, u.id)}>
+                    <span className="small">
+                      Nuova password per <b>{u.username}</b>:
+                    </span>
+                    <input
+                      className="input grow"
+                      type="password"
+                      autoComplete="new-password"
+                      value={resetPw}
+                      onChange={(e) => setResetPw(e.target.value)}
+                      minLength={12}
+                      required
+                    />
+                    <button className="btn btn-primary btn-small" type="submit" disabled={busy || resetPw.length < 12}>
+                      Salva
+                    </button>
+                    <button className="btn btn-ghost btn-small" type="button" onClick={() => setResetFor(null)}>
+                      Annulla
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            ) : (
+              <tr key={u.id}>
+                <td>{u.username}</td>
+                <td>
+                  <span className="pill">{u.role === "admin" ? "admin" : "conduttore"}</span>
+                </td>
+                <td className="muted small">{formatDate(u.createdAt)}</td>
+                <td className="cell-actions">
+                  {u.role === "admin" ? (
+                    <span className="muted small">account protetto</span>
+                  ) : (
+                    <>
+                      <button className="btn btn-ghost btn-small" onClick={() => { setResetFor(u.id); setResetPw(""); }}>
+                        Password
+                      </button>
+                      <button className="btn btn-ghost btn-small danger" onClick={() => onDelete(u.id)}>
+                        Elimina
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ),
+          )}
+        </tbody>
+      </table>
+      <p className="muted small" style={{ marginTop: 12 }}>
+        L'account admin non è modificabile da qui: cambia la sua password in Sicurezza. Gli altri utenti possono
+        condurre dirette ma non gestire utenti o configurazione.
+      </p>
+    </section>
+  );
+}
+
+function SettingsPanel({ notify }: { notify: (m: string) => void }) {
   const [form, setForm] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -374,8 +566,8 @@ function SettingsPanel() {
 
   if (!form) return null;
 
-  function field<K extends keyof Settings>(key: K) {
-    return (value: string) => setForm({ ...form!, [key]: value } as Settings);
+  function setField<K extends keyof Settings>(key: K, value: string | number) {
+    setForm({ ...form!, [key]: value } as Settings);
   }
 
   async function save(event: FormEvent) {
@@ -386,6 +578,7 @@ function SettingsPanel() {
     setMessage(null);
     try {
       const saved = await api.put<Settings>("/api/admin/settings", {
+        brandName: form.brandName,
         publicBaseUrl: form.publicBaseUrl,
         cdnBaseUrl: form.cdnBaseUrl,
         ingestHost: form.ingestHost,
@@ -393,6 +586,8 @@ function SettingsPanel() {
       });
       setForm(saved);
       setMessage("Impostazioni salvate.");
+      notify("Impostazioni salvate.");
+      document.title = saved.brandName;
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -425,9 +620,14 @@ function SettingsPanel() {
 
       <form className="grid-2" onSubmit={save}>
         <label className="field">
+          <span>Nome dell'installazione</span>
+          <input className="input" value={form.brandName} onChange={(e) => setField("brandName", e.target.value)} maxLength={40} />
+          <em className="muted">Compare nel pannello, nel player e nel titolo della pagina.</em>
+        </label>
+        <label className="field">
           <span>URL pubblico</span>
-          <input className="input" value={form.publicBaseUrl} onChange={(e) => field("publicBaseUrl")(e.target.value)} />
-          <em className="muted small">Il dominio della diretta, con https://.</em>
+          <input className="input" value={form.publicBaseUrl} onChange={(e) => setField("publicBaseUrl", e.target.value)} />
+          <em className="muted">Il dominio della diretta, con https://.</em>
         </label>
         <label className="field">
           <span>CDN (opzionale)</span>
@@ -435,14 +635,14 @@ function SettingsPanel() {
             className="input"
             value={form.cdnBaseUrl}
             placeholder="https://cdn.esempio.com"
-            onChange={(e) => field("cdnBaseUrl")(e.target.value)}
+            onChange={(e) => setField("cdnBaseUrl", e.target.value)}
           />
-          <em className="muted small">Vuoto = video servito dal VPS. Se impostata, spettatori caricano i segmenti da qui.</em>
+          <em className="muted">Vuoto = video servito dal VPS. Se impostata, gli spettatori caricano i segmenti da qui.</em>
         </label>
         <label className="field">
           <span>Host ingest OBS</span>
-          <input className="input" value={form.ingestHost} onChange={(e) => field("ingestHost")(e.target.value)} />
-          <em className="muted small">Può differire dal dominio pubblico (es. IP del VPS).</em>
+          <input className="input" value={form.ingestHost} onChange={(e) => setField("ingestHost", e.target.value)} />
+          <em className="muted">Può differire dal dominio pubblico (es. IP del VPS).</em>
         </label>
         <label className="field">
           <span>Porta ingest</span>
@@ -452,9 +652,9 @@ function SettingsPanel() {
             min={1}
             max={65535}
             value={form.ingestPort}
-            onChange={(e) => setForm({ ...form, ingestPort: Number(e.target.value) })}
+            onChange={(e) => setField("ingestPort", Number(e.target.value))}
           />
-          <em className="muted small">Default 1935 (RTMP).</em>
+          <em className="muted">Default 1935 (RTMP).</em>
         </label>
 
         <div className="row-between span-2">
@@ -483,15 +683,11 @@ function SettingsPanel() {
   );
 }
 
-function SecurityPanel({ me, onMeChanged, notify }: { me: Me["user"]; onMeChanged: (u: Me["user"]) => void; notify: (m: string) => void }) {
+function SecurityPanel({ notify }: { notify: (m: string) => void }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const [totpSetup, setTotpSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
-  const [totpCode, setTotpCode] = useState("");
-  const [disablePassword, setDisablePassword] = useState("");
 
   async function changePassword(event: FormEvent) {
     event.preventDefault();
@@ -509,51 +705,6 @@ function SecurityPanel({ me, onMeChanged, notify }: { me: Me["user"]; onMeChange
     }
   }
 
-  async function setupTotp() {
-    setBusy(true);
-    setError(null);
-    try {
-      setTotpSetup(await api.post<{ secret: string; otpauthUrl: string }>("/api/admin/totp/setup"));
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function enableTotp(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post("/api/admin/totp/enable", { code: totpCode });
-      onMeChanged({ ...me, totpEnabled: true });
-      setTotpSetup(null);
-      setTotpCode("");
-      notify("2FA attivo.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function disableTotp(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.post("/api/admin/totp/disable", { password: disablePassword });
-      onMeChanged({ ...me, totpEnabled: false });
-      setDisablePassword("");
-      notify("2FA disattivato.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <section className="card">
       <div className="card-head">
@@ -562,7 +713,7 @@ function SecurityPanel({ me, onMeChanged, notify }: { me: Me["user"]; onMeChange
       {error && <p className="error-text small">{error}</p>}
 
       <form className="stack" onSubmit={changePassword}>
-        <p className="small muted">Cambia password (le altre sessioni vengono chiuse):</p>
+        <p className="small muted">Cambia la tua password (le altre sessioni vengono chiuse):</p>
         <div className="row wrap">
           <input
             className="input"
@@ -588,56 +739,6 @@ function SecurityPanel({ me, onMeChanged, notify }: { me: Me["user"]; onMeChange
           </button>
         </div>
       </form>
-
-      <hr className="sep" />
-
-      {me.totpEnabled ? (
-        <form className="stack" onSubmit={disableTotp}>
-          <p className="small muted">2FA attivo. Per disattivarlo conferma la password:</p>
-          <div className="row wrap">
-            <input
-              className="input"
-              type="password"
-              placeholder="Password"
-              value={disablePassword}
-              onChange={(e) => setDisablePassword(e.target.value)}
-              required
-            />
-            <button className="btn btn-ghost btn-small" type="submit" disabled={busy}>
-              Disattiva 2FA
-            </button>
-          </div>
-        </form>
-      ) : totpSetup ? (
-        <form className="stack" onSubmit={enableTotp}>
-          <p className="small muted">Aggiungi questo segreto alla tua app di autenticazione, poi inserisci il codice:</p>
-          <code className="code">{totpSetup.secret}</code>
-          <code className="code small muted">{totpSetup.otpauthUrl}</code>
-          <div className="row wrap">
-            <input
-              className="input"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="Codice a 6 cifre"
-              value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
-              required
-            />
-            <button className="btn btn-primary btn-small" type="submit" disabled={busy}>
-              Abilita 2FA
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="stack">
-          <p className="small muted">2FA non attivo: protegge l'account del conduttore da un accesso rubato.</p>
-          <div>
-            <button className="btn btn-ghost btn-small" onClick={() => void setupTotp()} disabled={busy}>
-              Configura 2FA
-            </button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

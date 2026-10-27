@@ -30,8 +30,6 @@ export function openDb(file: string): Db {
       username_key  TEXT NOT NULL UNIQUE,          -- lowercase, used for lookups
       password_hash TEXT NOT NULL,
       role          TEXT NOT NULL DEFAULT 'admin',
-      totp_secret   TEXT,
-      totp_enabled  INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL
     );
 
@@ -51,6 +49,7 @@ export function openDb(file: string): Db {
       slug       TEXT NOT NULL UNIQUE,
       title      TEXT NOT NULL,
       status     TEXT NOT NULL DEFAULT 'draft',    -- draft | starting | live | ended
+      kind       TEXT NOT NULL DEFAULT 'video',    -- video | audio
       record     INTEGER NOT NULL DEFAULT 0,
       created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
       started_at TEXT,
@@ -80,6 +79,14 @@ export function openDb(file: string): Db {
       value TEXT NOT NULL
     );
   `);
+
+  // Additive migration for installs created before the audio-only mode existed:
+  // SQLite cannot add a column with NOT NULL without a default, and this one has
+  // a sensible one.
+  const streamCols = db.prepare("PRAGMA table_info(streams)").all() as Array<{ name: string }>;
+  if (!streamCols.some((c) => c.name === "kind")) {
+    db.exec("ALTER TABLE streams ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'");
+  }
 
   return db;
 }

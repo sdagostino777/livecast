@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# NDX Live — deploy to the VPS.
+# Livecast — deploy to the VPS.
 #
 #   bash infra/scripts/deploy.sh              # normal release
 #   bash infra/scripts/deploy.sh --provision  # first install (runs provision.sh remotely)
@@ -21,9 +21,19 @@ set -euo pipefail
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m==> FAILED: %s\033[0m\n' "$*" >&2; exit 1; }
 
-SSH_HOST="${SSH_HOST:-root@187.77.174.159}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/ndx_vps}"
-APP_DIR="/srv/ndx-live/app"
+# Connection settings come from the environment or from a git-ignored
+# .deploy.env next to this repository (.deploy.env.example shows the two
+# variables). Nothing here is tied to one host.
+if [ -f .deploy.env ]; then
+  # shellcheck disable=SC1091
+  source .deploy.env
+fi
+SSH_HOST="${SSH_HOST:?set SSH_HOST (e.g. root@203.0.113.10) in .deploy.env or the environment}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+APP_NAME="${APP_NAME:-livecast}"
+APP_USER="${APP_USER:-${APP_NAME}}"
+APP_DIR="/srv/${APP_NAME}/app"
+UNIT="${APP_NAME}.service"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:4100/api/health}"
 SSH="ssh -i ${SSH_KEY} -o BatchMode=yes -o ServerAliveInterval=30 -o ConnectTimeout=15 ${SSH_HOST}"
 
@@ -82,7 +92,7 @@ else
 fi
 # Before the first provision the service user does not exist yet; after it,
 # this is what keeps the tree owned by the user systemd runs as.
-${SSH} "if id ndxlive >/dev/null 2>&1; then chown -R ndxlive:ndxlive ${APP_DIR}; fi; chmod -R g+w ${APP_DIR}"
+${SSH} "if id ${APP_USER} >/dev/null 2>&1; then chown -R ${APP_USER}:${APP_USER} ${APP_DIR}; fi; chmod -R g+w ${APP_DIR}"
 log "source synced (${SYNC_MODE})"
 
 # --- 3. First-install provisioning (optional) -------------------------------
@@ -104,22 +114,22 @@ ${SSH} "set -euo pipefail
     npm install -g pnpm@12.14.0 >/dev/null 2>&1
   fi
   pnpm install --frozen-lockfile
-  pnpm --filter @ndx-live/api build
-  pnpm --filter @ndx-live/web build
-  chown -R ndxlive:ndxlive ${APP_DIR}
+  pnpm --filter @livecast/api build
+  pnpm --filter @livecast/web build
+  chown -R ${APP_USER}:${APP_USER} ${APP_DIR}
 "
 log "build ok"
 
 # --- 5. Restart and verify ---------------------------------------------------
 
-log "Restarting ndx-live"
-${SSH} "systemctl restart ndx-live && sleep 1 && systemctl is-active --quiet ndx-live" \
-  || { ${SSH} "journalctl -u ndx-live -n 40 --no-pager" || true; fail "service did not start"; }
+log "Restarting livecast"
+${SSH} "systemctl restart ${UNIT} && sleep 1 && systemctl is-active --quiet ${UNIT}" \
+  || { ${SSH} "journalctl -u ${UNIT} -n 40 --no-pager" || true; fail "service did not start"; }
 
 if ${SSH} "curl -fsS ${HEALTH_URL}" >/dev/null; then
   log "health check passed (${HEALTH_URL})"
 else
-  ${SSH} "journalctl -u ndx-live -n 40 --no-pager" || true
+  ${SSH} "journalctl -u ${UNIT} -n 40 --no-pager" || true
   fail "health check failed"
 fi
 
@@ -133,10 +143,10 @@ if [ "${RC}" -eq 2 ]; then
 elif [ "${RC}" -eq 0 ]; then
   PW="$(printf '%s\n' "${CREATE_OUT}" | sed -n 's/^ADMIN_PASSWORD=//p')"
   [ -n "${PW}" ] || fail "create-admin printed no password: ${CREATE_OUT}"
-  ${SSH} "printf 'ADMIN_PASSWORD=%s\n' '${PW}' >> /root/.ndx-live-credentials && chmod 600 /root/.ndx-live-credentials"
+  ${SSH} "printf 'ADMIN_PASSWORD=%s\n' '${PW}' >> /root/.livecast-credentials && chmod 600 /root/.livecast-credentials"
   printf '\n\033[1;32mAdmin creato.\033[0m  utente: admin\n'
   printf '  password: \033[1;33m%s\033[0m\n' "${PW}"
-  printf '  (salvata anche in /root/.ndx-live-credentials sul VPS)\n'
+  printf '  (salvata anche in /root/.livecast-credentials sul VPS)\n'
   printf '  Cambiala subito dal pannello dopo il primo accesso.\n'
 else
   fail "create-admin failed: ${CREATE_OUT}"

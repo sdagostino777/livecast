@@ -1,11 +1,13 @@
 import { FormEvent, useState } from "react";
 import { api, ApiError } from "../api";
+import { useBrand } from "../brand";
+import { BrandMark } from "../components/BrandMark";
 import { navigate } from "../router";
 
 export function Login() {
+  const brand = useBrand();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -14,7 +16,7 @@ export function Login() {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/api/auth/login", code ? { username, password, code } : { username, password });
+      await api.post("/api/auth/login", { username, password });
       navigate("/admin", true);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setError("Credenziali non valide.");
@@ -28,11 +30,8 @@ export function Login() {
   return (
     <div className="auth-page">
       <form className="card auth-card" onSubmit={submit}>
-        <div className="brand">
-          <span className="dot" aria-hidden />
-          NDX <b>Live</b>
-        </div>
-        <p className="muted small">Area conduttore</p>
+        <BrandMark name={brand} size={42} />
+        <p className="auth-title">Area conduttore</p>
 
         <label className="field">
           <span>Utente</span>
@@ -42,6 +41,7 @@ export function Login() {
             onChange={(e) => setUsername(e.target.value)}
             required
             autoFocus
+            placeholder="il tuo nome utente"
           />
         </label>
         <label className="field">
@@ -52,18 +52,7 @@ export function Login() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-          />
-        </label>
-        <label className="field">
-          <span>
-            Codice 2FA <em className="muted">(solo se attivo)</em>
-          </span>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            placeholder="la tua password"
           />
         </label>
 

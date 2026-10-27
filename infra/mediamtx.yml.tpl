@@ -1,4 +1,4 @@
-# MediaMTX configuration for NDX Live.
+# MediaMTX configuration for Livecast.
 #
 # Rendered from mediamtx.yml.tpl by provision.sh: the __PLACEHOLDERS__ are
 # replaced with credentials generated once on the VPS.

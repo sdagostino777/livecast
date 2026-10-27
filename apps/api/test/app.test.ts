@@ -11,10 +11,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
-import { createUser, getUserByUsername, hashPassword, setTotpSecret } from "../src/auth.js";
+import { createUser, getUserByUsername, hashPassword } from "../src/auth.js";
 import { MediaMtxClient } from "../src/services/mediamtx.js";
 import type { PipelineApi, PipelineCallbacks, PipelineStartOptions } from "../src/services/pipeline.js";
-import { totpAt } from "../src/totp.js";
 
 const PASSWORD = "correct horse battery staple";
 const USERNAME = "admin";
@@ -56,7 +55,7 @@ let dir: string;
 let pipeline: FakePipeline;
 
 async function boot(): Promise<{ app: FastifyInstance; dir: string; pipeline: FakePipeline }> {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ndx-app-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "livecast-app-"));
   pipeline = makeFakePipeline();
   const instance = await buildApp({
     dbFile: path.join(tmp, "db.sqlite"),
@@ -126,27 +125,6 @@ describe("auth", () => {
     });
     expect(unknown.statusCode).toBe(401);
     expect(unknown.json().error).toBe("invalid_credentials");
-  });
-
-  it("requires the TOTP code once enabled", async () => {
-    const db = app.db;
-    const user = getUserByUsername(db, USERNAME)!;
-    const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
-    setTotpSecret(db, user.id, secret, true);
-
-    const without = await app.inject({
-      method: "POST",
-      url: "/api/auth/login",
-      payload: { username: USERNAME, password: PASSWORD },
-    });
-    expect(without.statusCode).toBe(401);
-
-    const withCode = await app.inject({
-      method: "POST",
-      url: "/api/auth/login",
-      payload: { username: USERNAME, password: PASSWORD, code: totpAt(secret, Date.now() / 1000) },
-    });
-    expect(withCode.statusCode).toBe(200);
   });
 
   it("rejects cross-origin mutations", async () => {
@@ -289,30 +267,6 @@ describe("admin + public stream lifecycle", () => {
     expect(relogin.statusCode).toBe(200);
   });
 
-  it("sets up TOTP and requires the code to enable it", async () => {
-    const cookie = await login();
-    const setup = await app.inject({ method: "POST", url: "/api/admin/totp/setup", headers: { cookie } });
-    expect(setup.statusCode).toBe(200);
-    const { secret } = setup.json();
-    expect(secret).toMatch(/^[A-Z2-7]+$/);
-
-    const wrong = await app.inject({
-      method: "POST",
-      url: "/api/admin/totp/enable",
-      headers: { cookie },
-      payload: { code: "000000" },
-    });
-    expect(wrong.statusCode).toBe(401);
-
-    const right = await app.inject({
-      method: "POST",
-      url: "/api/admin/totp/enable",
-      headers: { cookie },
-      payload: { code: totpAt(secret, Date.now() / 1000) },
-    });
-    expect(right.statusCode).toBe(200);
-  });
-
   it("exposes and updates the runtime settings (CDN, ingest addressing)", async () => {
     const cookie = await login();
 
@@ -325,10 +279,10 @@ describe("admin + public stream lifecycle", () => {
       method: "PUT",
       url: "/api/admin/settings",
       headers: { cookie },
-      payload: { cdnBaseUrl: "https://cdn.ndx.example", ingestPort: 19350 },
+      payload: { cdnBaseUrl: "https://cdn.example", ingestPort: 19350 },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json().hlsBaseUrl).toBe("https://cdn.ndx.example");
+    expect(updated.json().hlsBaseUrl).toBe("https://cdn.example");
     expect(updated.json().obsServer).toBe("rtmp://localhost:19350/live");
 
     const invalid = await app.inject({
@@ -370,6 +324,132 @@ describe("admin + public stream lifecycle", () => {
 
     const after = await app.inject({ method: "GET", url: "/api/live/" + stream.slug });
     expect(after.json().status).toBe("ended");
+  });
+
+  it("creates an audio-only broadcast and exposes its kind", async () => {
+    const cookie = await login();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie },
+      payload: { title: "Radio assemblea", kind: "audio" },
+    });
+    expect(created.statusCode).toBe(201);
+    const stream = created.json().stream;
+    expect(stream.kind).toBe("audio");
+
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+    const page = await app.inject({ method: "GET", url: `/api/live/${stream.slug}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.json().kind).toBe("audio");
+    expect(page.json().hlsUrl).toContain(`/hls/${stream.slug}/master.m3u8`);
+  });
+
+  it("lets an operator run broadcasts but not manage users", async () => {
+    const adminCookie = await login();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/users",
+      headers: { cookie: adminCookie },
+      payload: { username: "mario", password: "operator password 123" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const operatorLogin = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "mario", password: "operator password 123" },
+    });
+    expect(operatorLogin.statusCode).toBe(200);
+    const operatorCookie = cookieOf(operatorLogin);
+    expect(operatorLogin.json().user.role).toBe("operator");
+
+    const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: { cookie: operatorCookie } });
+    expect(overview.statusCode).toBe(200);
+
+    const usersDenied = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie: operatorCookie } });
+    expect(usersDenied.statusCode).toBe(403);
+
+    const stream = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie: operatorCookie },
+      payload: { title: "da operatore" },
+    });
+    expect(stream.statusCode).toBe(201);
+  });
+
+  it("manages operator accounts, and never the admin one", async () => {
+    const cookie = await login();
+
+    const reserved = await app.inject({
+      method: "POST",
+      url: "/api/admin/users",
+      headers: { cookie },
+      payload: { username: "admin", password: "another password 123" },
+    });
+    expect(reserved.statusCode).toBe(400);
+    expect(reserved.json().error).toBe("reserved_username");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/users",
+      headers: { cookie },
+      payload: { username: "lucia", password: "initial password 123" },
+    });
+    expect(created.statusCode).toBe(201);
+    const userId = created.json().user.id;
+
+    const duplicate = await app.inject({
+      method: "POST",
+      url: "/api/admin/users",
+      headers: { cookie },
+      payload: { username: "lucia", password: "initial password 123" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+
+    const list = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie } });
+    const adminRow = (list.json().users as Array<{ id: string; role: string }>).find((u) => u.role === "admin")!;
+    expect(adminRow).toBeTruthy();
+
+    const protectedReset = await app.inject({
+      method: "POST",
+      url: `/api/admin/users/${adminRow.id}/password`,
+      headers: { cookie },
+      payload: { password: "hijacked password 123" },
+    });
+    expect(protectedReset.statusCode).toBe(403);
+    expect(protectedReset.json().error).toBe("admin_account_protected");
+
+    const protectedDelete = await app.inject({ method: "DELETE", url: `/api/admin/users/${adminRow.id}`, headers: { cookie } });
+    expect(protectedDelete.statusCode).toBe(403);
+
+    const reset = await app.inject({
+      method: "POST",
+      url: `/api/admin/users/${userId}/password`,
+      headers: { cookie },
+      payload: { password: "brand new password 123" },
+    });
+    expect(reset.statusCode).toBe(200);
+
+    const oldPassword = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "lucia", password: "initial password 123" },
+    });
+    expect(oldPassword.statusCode).toBe(401);
+    const newPassword = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "lucia", password: "brand new password 123" },
+    });
+    expect(newPassword.statusCode).toBe(200);
+
+    const removed = await app.inject({ method: "DELETE", url: `/api/admin/users/${userId}`, headers: { cookie } });
+    expect(removed.statusCode).toBe(200);
+    const afterDelete = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie } });
+    expect((afterDelete.json().users as Array<{ username: string }>).some((u) => u.username === "lucia")).toBe(false);
   });
 
   it("rejects unknown and malformed stream slugs", async () => {

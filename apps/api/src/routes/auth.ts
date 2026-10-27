@@ -20,12 +20,10 @@ import {
   sessionCookieOptions,
   verifyPassword,
 } from "../auth.js";
-import { verifyTotp } from "../totp.js";
 
 const LoginBody = z.object({
   username: z.string().min(1).max(100),
   password: z.string().min(1).max(200),
-  code: z.string().max(10).optional(),
 });
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -35,21 +33,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       const parsed = LoginBody.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: "invalid_request" });
-      const { username, password, code } = parsed.data;
+      const { username, password } = parsed.data;
 
       const user = getUserByUsername(app.db, username);
       const passwordOk = user !== null && (await verifyPassword(user.passwordHash, password));
       if (!user || !passwordOk) {
         audit(app.db, { username, action: "login_failed", detail: "bad_credentials", ip: req.ip });
         return reply.code(401).send({ error: "invalid_credentials" });
-      }
-
-      if (user.totpEnabled) {
-        const totpOk = Boolean(user.totpSecret) && Boolean(code) && verifyTotp(user.totpSecret!, code!);
-        if (!totpOk) {
-          audit(app.db, { userId: user.id, username, action: "login_failed", detail: "bad_totp", ip: req.ip });
-          return reply.code(401).send({ error: "invalid_credentials" });
-        }
       }
 
       const { token } = createSession(
@@ -61,9 +51,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       );
       reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions());
       audit(app.db, { userId: user.id, username, action: "login_ok", ip: req.ip });
-      return {
-        user: { username: user.username, role: user.role, totpEnabled: user.totpEnabled },
-      };
+      return { user: { username: user.username, role: user.role } };
     },
   );
 
@@ -84,6 +72,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // session must stop working immediately, not at next cookie expiry.
     const session = lookupSession(app.db, token);
     if (!session) return reply.code(401).send({ error: "unauthorized" });
-    return { user: { username: session.user.username, role: session.user.role, totpEnabled: session.user.totpEnabled } };
+    return { user: { username: session.user.username, role: session.user.role } };
   });
 }

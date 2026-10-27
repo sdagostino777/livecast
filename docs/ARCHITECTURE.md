@@ -33,9 +33,12 @@ lifecycle:
 - **Input**: `rtmp://<reader>:<pass>@127.0.0.1:1935/live` — the MediaMTX loopback
   reader. The reader user is restricted by IP to loopback, so the encoder
   credential never has to be a public secret.
-- **Ladder**: 1280×720 @ 2.8 Mbps, 854×480 @ 1.4 Mbps, 640×360 @ 0.8 Mbps, AAC
-  128/96/64 kbps, keyframe forced every 2 s (`expr:gte(t,n_forced*2)`) so every
-  segment starts on an IDR frame.
+- **Video ladder**: 1280×720 @ 2.8 Mbps, 854×480 @ 1.4 Mbps, 640×360 @ 0.8 Mbps,
+  AAC 128/96/64 kbps, keyframe forced every 2 s (`expr:gte(t,n_forced*2)`) so
+  every segment starts on an IDR frame.
+- **Audio-only mode**: a single 128 kbps AAC rendition with `-vn`. A publisher
+  that still sends video has it dropped rather than transcoded — this is a
+  radio broadcast, not a muted video one.
 - **Output**: standard HLS, 2 s segments, 6 kept per variant (~12 s window).
   Standard HLS rather than LL-HLS: partial segments complicate CDN caching for a
   latency gain a passive audience will not notice.
@@ -86,17 +89,20 @@ The honest limits:
 
 ## Security model
 
+- Accounts: one `admin` (managed from the panel's Sicurezza section) and any
+  number of `operator` users, created from the Utenti section. Operators run
+  broadcasts; user management and the admin account itself are out of their
+  reach, and the admin row cannot be deleted or password-reset by anyone else.
 - Passwords: argon2id, OWASP parameters (19 MiB, t=2, p=1).
 - Sessions: opaque 32-byte tokens, SHA-256 stored, 12 h expiry, `httpOnly`,
   `SameSite=Lax`, `Secure` in production. Re-resolved from the database on every
-  request so revocation is immediate.
+  request so revocation is immediate; resetting a user's password revokes all
+  of that user's sessions.
 - CSRF: `SameSite=Lax` plus an Origin check on every mutating request against
   the configured public origin (read from the settings table, so it follows a
   base-URL change).
-- Login: 10 attempts / 15 min / IP, generic error for both wrong password and
-  wrong TOTP — the login form must not be a username oracle.
-- TOTP: RFC 6238 implemented on `node:crypto` (±1 step drift), ~40 lines, tested
-  against the RFC 6238 vectors.
+- Login: 10 attempts / 15 min / IP, and the same generic error whether the
+  username exists or not — the login form must not be a username oracle.
 - Ingest: publish restricted to the `live` path with a generated 32-character
   key, checked by MediaMTX; readers restricted to loopback.
 - The panel reveals the OBS credential only on an authenticated request, and

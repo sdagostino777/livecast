@@ -21,14 +21,16 @@ import { config, hlsDir, recordingsDir } from "../config.js";
 import { audit } from "../db.js";
 import {
   MIN_PASSWORD_LENGTH,
+  createUser,
+  deleteUser,
+  destroyAllSessions,
   destroyOtherSessions,
   getUserByUsername,
   hashPassword,
+  listUsers,
   setPassword,
-  setTotpSecret,
   verifyPassword,
 } from "../auth.js";
-import { generateTotpSecret, otpauthUrl, verifyTotp } from "../totp.js";
 import { nowIso } from "../ids.js";
 import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
@@ -37,7 +39,22 @@ import { ingestServer, ingestServerWithCreds, mediaInputUrl } from "../ingest.js
 
 const CreateStreamBody = z.object({
   title: z.string().trim().min(1).max(120),
+  kind: z.enum(["video", "audio"]).default("video"),
   record: z.boolean().optional().default(false),
+});
+
+const CreateUserBody = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3)
+    .max(40)
+    .refine((v) => /^[a-z0-9._-]+$/i.test(v), "invalid_username"),
+  password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
+});
+
+const ResetPasswordBody = z.object({
+  password: z.string().min(MIN_PASSWORD_LENGTH).max(200),
 });
 
 const PatchStreamBody = z.object({
@@ -49,9 +66,6 @@ const PasswordBody = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(200),
 });
-
-const TotpCodeBody = z.object({ code: z.string().min(6).max(6) });
-const TotpDisableBody = z.object({ password: z.string().min(1).max(200) });
 
 const CdnTestBody = z.object({
   url: z
@@ -127,6 +141,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!session) return reply;
     const settings = app.settings.get();
     return {
+      brandName: settings.brandName,
       publicBaseUrl: settings.publicBaseUrl,
       cdnBaseUrl: settings.cdnBaseUrl,
       ingestHost: settings.ingestHost,
@@ -151,6 +166,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         ip: req.ip,
       });
       return {
+        brandName: next.brandName,
         publicBaseUrl: next.publicBaseUrl,
         cdnBaseUrl: next.cdnBaseUrl,
         ingestHost: next.ingestHost,
@@ -208,6 +224,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.ok) return reply.code(400).send({ error: "invalid_request" });
     const row = createStreamRow(app.db, {
       title: parsed.data.title,
+      kind: parsed.data.kind ?? "video",
       record: parsed.data.record ?? false,
       createdBy: session.user.id,
     });
@@ -289,6 +306,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           ffmpegBin: config.ffmpegBin,
           inputUrl: mediaInputUrl(),
           outDir: hlsDir(slug),
+          kind: stream.kind,
           segmentSeconds: config.hlsSegmentSeconds,
           listSize: config.hlsListSize,
           recordFile,
@@ -369,42 +387,83 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  app.post("/api/admin/totp/setup", async (req, reply) => {
+  // --- users ---------------------------------------------------------------
+  // Only the admin role manages accounts, and the admin account itself is out
+  // of reach: it cannot be deleted or have its password reset from this panel.
+  // Its password is changed through /api/admin/password by the person holding
+  // the session, which is the only authority over that account.
+
+  app.get("/api/admin/users", async (req, reply) => {
     const session = requireSession(app.db, req, reply);
     if (!session) return reply;
-    const secret = generateTotpSecret();
-    setTotpSecret(app.db, session.user.id, secret, false);
-    audit(app.db, { userId: session.user.id, username: session.user.username, action: "totp_setup", ip: req.ip });
-    return { secret, otpauthUrl: otpauthUrl("NDX Live", session.user.username, secret) };
+    if (session.user.role !== "admin") return reply.code(403).send({ error: "admin_only" });
+    return { users: listUsers(app.db) };
   });
 
-  app.post("/api/admin/totp/enable", async (req, reply) => {
+  app.post("/api/admin/users", async (req, reply) => {
     const session = requireSession(app.db, req, reply);
     if (!session) return reply;
-    const parsed = safeParse(TotpCodeBody, req.body);
+    if (session.user.role !== "admin") return reply.code(403).send({ error: "admin_only" });
+    const parsed = safeParse(CreateUserBody, req.body);
     if (!parsed.ok) return reply.code(400).send({ error: "invalid_request" });
-    const user = getUserByUsername(app.db, session.user.username);
-    if (!user?.totpSecret) return reply.code(400).send({ error: "totp_not_setup" });
-    if (!verifyTotp(user.totpSecret, parsed.data.code)) {
-      return reply.code(401).send({ error: "invalid_code" });
-    }
-    setTotpSecret(app.db, user.id, user.totpSecret, true);
-    audit(app.db, { userId: user.id, username: user.username, action: "totp_enabled", ip: req.ip });
+    const { username, password } = parsed.data;
+    if (username.toLowerCase() === "admin") return reply.code(400).send({ error: "reserved_username" });
+    if (getUserByUsername(app.db, username)) return reply.code(409).send({ error: "username_taken" });
+    const user = createUser(app.db, username, await hashPassword(password), "operator");
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "user_created",
+      detail: user.username,
+      ip: req.ip,
+    });
+    return reply.code(201).send({ user: { id: user.id, username: user.username, role: user.role } });
+  });
+
+  app.post("/api/admin/users/:id/password", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    if (session.user.role !== "admin") return reply.code(403).send({ error: "admin_only" });
+    const params = safeParse(IdParams, req.params);
+    const parsed = safeParse(ResetPasswordBody, req.body);
+    if (!params.ok || !parsed.ok) return reply.code(400).send({ error: "invalid_request" });
+    const target = app.db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(params.data.id) as
+      | { id: string; username: string; role: string }
+      | undefined;
+    if (!target) return reply.code(404).send({ error: "not_found" });
+    if (target.role === "admin") return reply.code(403).send({ error: "admin_account_protected" });
+    setPassword(app.db, target.id, await hashPassword(parsed.data.password));
+    destroyAllSessions(app.db, target.id);
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "user_password_reset",
+      detail: target.username,
+      ip: req.ip,
+    });
     return { ok: true };
   });
 
-  app.post("/api/admin/totp/disable", async (req, reply) => {
+  app.delete("/api/admin/users/:id", async (req, reply) => {
     const session = requireSession(app.db, req, reply);
     if (!session) return reply;
-    const parsed = safeParse(TotpDisableBody, req.body);
-    if (!parsed.ok) return reply.code(400).send({ error: "invalid_request" });
-    const user = getUserByUsername(app.db, session.user.username);
-    if (!user) return reply.code(401).send({ error: "unauthorized" });
-    if (!(await verifyPassword(user.passwordHash, parsed.data.password))) {
-      return reply.code(403).send({ error: "invalid_credentials" });
-    }
-    setTotpSecret(app.db, user.id, null, false);
-    audit(app.db, { userId: user.id, username: user.username, action: "totp_disabled", ip: req.ip });
+    if (session.user.role !== "admin") return reply.code(403).send({ error: "admin_only" });
+    const params = safeParse(IdParams, req.params);
+    if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
+    const target = app.db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(params.data.id) as
+      | { id: string; username: string; role: string }
+      | undefined;
+    if (!target) return reply.code(404).send({ error: "not_found" });
+    if (target.role === "admin") return reply.code(403).send({ error: "admin_account_protected" });
+    if (target.id === session.user.id) return reply.code(400).send({ error: "cannot_delete_self" });
+    deleteUser(app.db, target.id);
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "user_deleted",
+      detail: target.username,
+      ip: req.ip,
+    });
     return { ok: true };
   });
 

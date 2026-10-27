@@ -16,6 +16,7 @@ export interface StreamRow {
   slug: string;
   title: string;
   status: StreamStatus;
+  kind: "video" | "audio";
   record: number;
   created_by: string | null;
   started_at: string | null;
@@ -28,6 +29,7 @@ export interface StreamView {
   slug: string;
   title: string;
   status: StreamStatus;
+  kind: "video" | "audio";
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -41,6 +43,7 @@ export function toView(row: StreamRow, publicBaseUrl: string = process.env.PUBLI
     slug: row.slug,
     title: row.title,
     status: row.status,
+    kind: row.kind,
     record: row.record === 1,
     startedAt: row.started_at,
     endedAt: row.ended_at,
@@ -69,15 +72,18 @@ export function listStreams(db: Db, limit = 50): StreamRow[] {
   return db.prepare("SELECT * FROM streams ORDER BY created_at DESC LIMIT ?").all(limit) as StreamRow[];
 }
 
-export function createStreamRow(db: Db, opts: { title: string; record: boolean; createdBy: string | null }): StreamRow {
+export function createStreamRow(
+  db: Db,
+  opts: { title: string; kind: "video" | "audio"; record: boolean; createdBy: string | null },
+): StreamRow {
   for (let attempt = 0; attempt < 8; attempt++) {
     const id = newId("str");
     const slug = newSlug();
     try {
       db.prepare(
-        `INSERT INTO streams (id, slug, title, status, record, created_by, created_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?)`,
-      ).run(id, slug, opts.title, opts.record ? 1 : 0, opts.createdBy, nowIso());
+        `INSERT INTO streams (id, slug, title, status, kind, record, created_by, created_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)`,
+      ).run(id, slug, opts.title, opts.kind, opts.record ? 1 : 0, opts.createdBy, nowIso());
       return getStreamById(db, id)!;
     } catch (err) {
       const code = (err as { code?: string }).code ?? "";

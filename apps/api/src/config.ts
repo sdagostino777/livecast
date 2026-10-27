@@ -50,7 +50,7 @@ export const config = {
   mediaReadPass: str("MEDIAMTX_READ_PASS", ""),
 
   /** The broadcaster's ingest credentials — shown in the admin panel. */
-  publishUser: str("PUBLISH_USER", "ndx"),
+  publishUser: str("PUBLISH_USER", "publisher"),
   publishPass: str("PUBLISH_PASS", ""),
 
   /** Where the built React app lives (served by Fastify in production). */
@@ -78,5 +78,5 @@ export function recordingsDir(): string {
 }
 
 export function dbFile(): string {
-  return path.join(config.dataDir, "ndx-live.db");
+  return path.join(config.dataDir, "database.sqlite");
 }

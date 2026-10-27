@@ -14,7 +14,9 @@ import type { Db } from "./db.js";
 import { config } from "./config.js";
 
 export interface RuntimeSettings {
-  /** Canonical public origin of this install, e.g. https://live.ndx-llc.com */
+  /** Name shown in the panel, the player and the page title. */
+  brandName: string;
+  /** Canonical public origin of this install, e.g. https://live.example.com */
   publicBaseUrl: string;
   /** Optional CDN origin (Bunny/Cloudflare/Fastly). Empty = serve HLS from the VPS. */
   cdnBaseUrl: string;
@@ -24,11 +26,18 @@ export interface RuntimeSettings {
   ingestPort: number;
 }
 
-const SETTING_KEYS = ["publicBaseUrl", "cdnBaseUrl", "ingestHost", "ingestPort"] as const;
+const SETTING_KEYS = ["brandName", "publicBaseUrl", "cdnBaseUrl", "ingestHost", "ingestPort"] as const;
 
 const URL_RE = /^https?:\/\/[a-z0-9.-]+(:\d+)?(\/.*)?$/i;
 
 export const SettingsPatch = z.object({
+  brandName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .refine((v) => /^[\p{L}\p{N} .\-&']+$/u.test(v), "invalid_name")
+    .optional(),
   publicBaseUrl: z.string().trim().max(200).refine((v) => URL_RE.test(v.replace(/\/+$/, "")), "invalid_url").optional(),
   cdnBaseUrl: z
     .union([z.literal(""), z.string().trim().max(200).refine((v) => URL_RE.test(v.replace(/\/+$/, "")), "invalid_url")])
@@ -52,6 +61,7 @@ function trimBase(value: string): string {
 export function defaultSettings(): RuntimeSettings {
   const url = new URL(config.publicUrl);
   return {
+    brandName: process.env.BRAND_NAME || "Livecast",
     publicBaseUrl: trimBase(config.publicUrl),
     cdnBaseUrl: "",
     ingestHost: process.env.INGEST_HOST || url.hostname,
@@ -75,6 +85,7 @@ export class SettingsStore {
     const parsed = SettingsPatch.parse(patch);
     const next: RuntimeSettings = { ...this.current };
 
+    if (parsed.brandName !== undefined) next.brandName = parsed.brandName;
     if (parsed.publicBaseUrl !== undefined) next.publicBaseUrl = trimBase(parsed.publicBaseUrl);
     if (parsed.cdnBaseUrl !== undefined) next.cdnBaseUrl = parsed.cdnBaseUrl === "" ? "" : trimBase(parsed.cdnBaseUrl);
     if (parsed.ingestHost !== undefined) next.ingestHost = parsed.ingestHost.toLowerCase();
@@ -88,6 +99,7 @@ export class SettingsStore {
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     );
     const tx = this.db.transaction(() => {
+      upsert.run("brandName", next.brandName);
       upsert.run("publicBaseUrl", next.publicBaseUrl);
       upsert.run("cdnBaseUrl", next.cdnBaseUrl);
       upsert.run("ingestHost", next.ingestHost);
@@ -110,6 +122,7 @@ export class SettingsStore {
     const pick = (key: (typeof SETTING_KEYS)[number], fallback: string): string => stored.get(key) ?? fallback;
 
     const loaded: RuntimeSettings = {
+      brandName: pick("brandName", defaults.brandName),
       publicBaseUrl: trimBase(pick("publicBaseUrl", defaults.publicBaseUrl)),
       cdnBaseUrl: trimBase(pick("cdnBaseUrl", defaults.cdnBaseUrl)),
       ingestHost: pick("ingestHost", defaults.ingestHost),
@@ -122,6 +135,7 @@ export class SettingsStore {
       this.current = defaults;
       const upsert = this.db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
       const tx = this.db.transaction(() => {
+        upsert.run("brandName", defaults.brandName);
         upsert.run("publicBaseUrl", defaults.publicBaseUrl);
         upsert.run("cdnBaseUrl", defaults.cdnBaseUrl);
         upsert.run("ingestHost", defaults.ingestHost);

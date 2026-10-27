@@ -1,17 +1,17 @@
 {
-  "name": "ndx-live",
+  "name": "livecast",
   "private": true,
-  "description": "NDX Live — live streaming platform (RTMP ingest → adaptive-bitrate HLS → public player)",
+  "description": "Livecast — live streaming platform (RTMP ingest → adaptive-bitrate HLS → public player)",
   "packageManager": "pnpm@12.14.0",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "dev:api": "pnpm --filter @ndx-live/api dev",
-    "dev:web": "pnpm --filter @ndx-live/web dev",
+    "dev:api": "pnpm --filter @livecast/api dev",
+    "dev:web": "pnpm --filter @livecast/web dev",
     "build": "pnpm -r run build",
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r run typecheck",
-    "cli": "pnpm --filter @ndx-live/api cli"
+    "cli": "pnpm --filter @livecast/api cli"
   }
 }

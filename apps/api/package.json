@@ -1,5 +1,5 @@
 {
-  "name": "@ndx-live/api",
+  "name": "@livecast/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
