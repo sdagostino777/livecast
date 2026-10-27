@@ -77,10 +77,12 @@ if [ "${SYNC_MODE}" = "rsync" ]; then
     ./ "${SSH_HOST}:${APP_DIR}/"
 else
   log "GNU rsync not found — syncing with tar (removed files are not deleted remotely)"
-  tar -czf - "${EXCLUDES[@]}" . \
+  COPYFILE_DISABLE=1 tar -czf - --no-xattrs --exclude "._*" "${EXCLUDES[@]}" . \
     | ${SSH} "mkdir -p ${APP_DIR} && tar -xzf - -C ${APP_DIR}"
 fi
-${SSH} "chown -R ndxlive:ndxlive ${APP_DIR} && chmod -R g+w ${APP_DIR}"
+# Before the first provision the service user does not exist yet; after it,
+# this is what keeps the tree owned by the user systemd runs as.
+${SSH} "if id ndxlive >/dev/null 2>&1; then chown -R ndxlive:ndxlive ${APP_DIR}; fi; chmod -R g+w ${APP_DIR}"
 log "source synced (${SYNC_MODE})"
 
 # --- 3. First-install provisioning (optional) -------------------------------
