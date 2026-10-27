@@ -46,6 +46,7 @@ function makeFakePipeline(): FakePipeline {
       state = "live";
       fake.callbacks?.onLive();
     },
+    currentInput: () => (state === "idle" ? null : "primary"),
   };
   return fake;
 }
@@ -450,6 +451,20 @@ describe("admin + public stream lifecycle", () => {
     expect(removed.statusCode).toBe(200);
     const afterDelete = await app.inject({ method: "GET", url: "/api/admin/users", headers: { cookie } });
     expect((afterDelete.json().users as Array<{ username: string }>).some((u) => u.username === "lucia")).toBe(false);
+  });
+
+  it("reports connectivity checks for the panel LEDs", async () => {
+    const cookie = await login();
+    const res = await app.inject({ method: "GET", url: "/api/admin/checks", headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toHaveProperty("origin.ok");
+    expect(body.origin.ok).toBe(false); // no listener in the test environment
+    expect(body.cdnEnabled).toBe(false);
+    expect(body.cdn).toBeNull();
+    expect(body.ingestTcp).toBe(false);
+    const anon = await app.inject({ method: "GET", url: "/api/admin/checks" });
+    expect(anon.statusCode).toBe(401);
   });
 
   it("rejects unknown and malformed stream slugs", async () => {

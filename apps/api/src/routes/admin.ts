@@ -32,6 +32,7 @@ import {
   verifyPassword,
 } from "../auth.js";
 import { nowIso } from "../ids.js";
+import net from "node:net";
 import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
@@ -82,6 +83,45 @@ function safeParse<T>(schema: z.ZodType<T>, value: unknown): { ok: true; data: T
   return parsed.success ? { ok: true, data: parsed.data } : { ok: false };
 }
 
+interface ProbeResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+  ms: number;
+}
+
+interface ChecksPayload {
+  origin: ProbeResult;
+  cdn: ProbeResult | null;
+  ingestTcp: boolean;
+  cdnEnabled: boolean;
+  pipeline: string;
+}
+
+async function probeHttp(url: string): Promise<ProbeResult> {
+  const started = Date.now();
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000), headers: { "cache-control": "no-cache" } });
+    return { ok: res.ok, status: res.status, ms: Date.now() - started };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "error", ms: Date.now() - started };
+  }
+}
+
+function probeTcp(host: string, port: number): Promise<{ ok: boolean; ms: number; error?: string }> {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const socket = net.connect({ host, port, timeout: 3000 });
+    const finish = (result: { ok: boolean; error?: string }) => {
+      socket.destroy();
+      resolve({ ...result, ms: Date.now() - started });
+    };
+    socket.once("connect", () => finish({ ok: true }));
+    socket.once("error", (err) => finish({ ok: false, error: err.message }));
+    socket.once("timeout", () => finish({ ok: false, error: "timeout" }));
+  });
+}
+
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/admin/overview", async (req, reply) => {
     const session = requireSession(app.db, req, reply);
@@ -89,7 +129,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
     const settings = app.settings.get();
     const active = getActiveStream(app.db);
-    const ingest = await app.mediamtx.getPath(config.ingestPath);
+    const [primary, backup] = await Promise.all([
+      app.mediamtx.getPath(config.ingestPath),
+      app.mediamtx.getPath(config.ingestBackupPath),
+    ]);
     const startedAtMs = app.pipeline.startedAt();
 
     return {
@@ -105,10 +148,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       ingest: {
         // null when MediaMTX's API cannot be reached: the page shows "unknown"
         // instead of claiming the broadcaster is offline.
-        reachable: ingest !== null,
-        ready: ingest?.ready ?? false,
-        readers: ingest?.readers ?? 0,
+        reachable: primary !== null || backup !== null,
+        ready: primary?.ready ?? false,
+        backupReady: backup?.ready ?? false,
+        readers: primary?.readers ?? 0,
+        currentInput: app.pipeline.currentInput(),
         server: ingestServer(settings),
+        backupServer: ingestServer(settings, config.ingestBackupPath),
         publishUser: config.publishUser,
         hasPublishPass: config.publishPass.length > 0,
       },
@@ -124,10 +170,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const session = requireSession(app.db, req, reply);
     if (!session) return reply;
     const url = ingestServerWithCreds(app.settings.get());
+    const backupUrl = ingestServerWithCreds(app.settings.get(), config.ingestBackupPath);
     audit(app.db, { userId: session.user.id, username: session.user.username, action: "ingest_key_revealed", ip: req.ip });
     if (!url) return reply.code(503).send({ error: "publish_pass_not_configured" });
     return {
       server: url,
+      backupServer: backupUrl,
       // OBS: paste this in "Server" and leave "Stream Key" empty.
       streamKey: "",
       publishUser: config.publishUser,
@@ -178,6 +226,34 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const code = err instanceof Error ? err.message : "invalid_settings";
       return reply.code(400).send({ error: code });
     }
+  });
+
+  // --- connectivity checks for the panel's LEDs ---------------------------
+  // Answers "is this URL actually working *from the server*", which is the only
+  // vantage point that matters: the operator's laptop can reach the CDN while
+  // the origin's outbound path is broken, and vice versa.
+  const checksCache = new Map<string, { at: number; value: ChecksPayload }>();
+  app.get("/api/admin/checks", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const cached = checksCache.get("all");
+    if (cached && Date.now() - cached.at < 5000) return cached.value;
+
+    const settings = app.settings.get();
+    const [origin, cdn, tcp] = await Promise.all([
+      probeHttp(`${settings.publicBaseUrl}/api/health`),
+      settings.cdnBaseUrl ? probeHttp(`${settings.cdnBaseUrl}/api/health`) : Promise.resolve(null),
+      probeTcp(settings.ingestHost, settings.ingestPort),
+    ]);
+    const value: ChecksPayload = {
+      origin,
+      cdn,
+      ingestTcp: tcp.ok,
+      cdnEnabled: settings.cdnBaseUrl !== "",
+      pipeline: app.pipeline.status,
+    };
+    checksCache.set("all", { at: Date.now(), value });
+    return value;
   });
 
   app.post("/api/admin/cdn-test", async (req, reply) => {
@@ -304,7 +380,16 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       app.pipeline.start(
         {
           ffmpegBin: config.ffmpegBin,
-          inputUrl: mediaInputUrl(),
+          inputUrls: {
+            primary: mediaInputUrl(config.ingestPath),
+            backup: mediaInputUrl(config.ingestBackupPath),
+          },
+          probeReady: async (which) => {
+            const pathReady = await app.mediamtx.getPath(
+              which === "primary" ? config.ingestPath : config.ingestBackupPath,
+            );
+            return pathReady?.ready ?? false;
+          },
           outDir: hlsDir(slug),
           kind: stream.kind,
           segmentSeconds: config.hlsSegmentSeconds,

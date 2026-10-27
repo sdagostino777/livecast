@@ -68,6 +68,7 @@ times, which keeps the behaviour deterministic under tests.
 | Failure | Detection | Recovery |
 | --- | --- | --- |
 | OBS disconnects mid-stream | FFmpeg input EOF, exit handler | relaunch in ≤ 2.5 s; resumes on OBS reconnect |
+| Primary publisher dies, backup is live | FFmpeg input EOF / watchdog, `probeReady` before each launch | relaunch reading `/backup`; panel shows "In uso: backup" |
 | Encoder hung, socket alive | segment list unchanged for 120 s | SIGKILL, then the same relaunch path |
 | MediaMTX crashes | systemd `Restart=always` (2 s) | OBS reconnects; encoder relaunches when the ingest path is ready |
 | Fastify crashes | systemd `Restart=always` (2 s) | sessions and stream state live in SQLite, not memory |
@@ -76,10 +77,11 @@ times, which keeps the behaviour deterministic under tests.
 
 The honest limits:
 
-- **One ingest path.** A second broadcaster cannot publish concurrently —
-  MediaMTX has one publish slot per path. Redundant ingest would be a second
-  MediaMTX instance on another host and a DNS trick; that is a deployment
-  exercise, not a code one.
+- **Two publish paths, one encoder.** The primary and backup paths fail over in
+  the supervisor; they do not protect the origin: a dead VPS still needs a
+  standby host and a DNS flip (see the README's "If the server itself dies").
+- **One encode per broadcast.** CPU is the constraint on how many simultaneous
+  broadcasts a VPS can encode, not the network; the design targets one event.
 - **HLS is not synchronous.** After a publisher dropout the last ~12 s of
   segments remain playable, then players stall rather than show a spinner
   permanently. Viewers with hls.js auto-retry; the page polls status.
@@ -107,6 +109,12 @@ The honest limits:
   key, checked by MediaMTX; readers restricted to loopback.
 - The panel reveals the OBS credential only on an authenticated request, and
   writes `ingest_key_revealed` to the audit log.
+
+## Capacity in numbers
+
+Each viewer at ~2 Mbps means 500 viewers ≈ the 1 Gbps port of a typical VPS:
+that is the wall before a CDN, and the panel says so when no CDN is configured.
+The 4,000-viewer event below is the same arithmetic, solved with a pull zone.
 
 ## Scaling to the 4,000-viewer event
 

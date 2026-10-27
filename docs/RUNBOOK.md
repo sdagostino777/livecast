@@ -20,6 +20,26 @@ to get wrong: attaching a CDN, and verifying the encoder.
 If OBS never connects, the stream ends itself after `INGEST_WAIT_SECONDS` (10
 minutes by default) rather than waiting forever — restart it from the panel.
 
+## Redundancy drill (primary / backup encoder)
+
+The system accepts two publishers: `/live` (primary) and `/backup`. The encoder
+uses whichever is actually connected, preferring the primary, and the panel shows
+a green LED per publisher plus "In uso: principale/backup".
+
+To rehearse:
+
+1. Start a broadcast; push from the primary encoder. Panel: primary LED green,
+   "In uso: principale".
+2. Stop the primary encoder (push a second RTMP stream to the **backup** URL
+   from the panel's revealed credentials instead). Within ~3 s the panel shows
+   "In uso: backup" and the player keeps playing — a few seconds of freeze while
+   FFmpeg relaunches, nothing more.
+3. Restart the primary: the next relaunch (or the next dropout) returns to it.
+
+The backup encoder can be a second OBS on another machine, a phone, or a spare
+laptop on a different network. Two encoders on the same Wi-Fi protect against
+the OBS crashing, not against the network dying.
+
 ## Managing people
 
 - **Utenti** (admin only): create an operator with a username and a 12+ character
@@ -181,6 +201,19 @@ After the first deploy: in **Configurazione** set the new public URL, the CDN (i
 any) and the ingest host, then create the broadcast. No code changes, no data
 migration for a fresh event — the SQLite file under `DATA_DIR` is the only state,
 and copying `DATA_DIR` moves it.
+
+## If the VPS is down
+
+The event is down too: the encoder lives on that machine. Recovery:
+
+1. On a standby VPS (provisioned with the same `APP_NAME`), restore the last
+   `DATA_DIR` backup (it contains the database and the recordings) and the
+   `.env` from `/srv/<app>/app/.env`.
+2. Point the DNS record at the standby IP (TTL 300 → ~5 min).
+3. Start the encoder and the publishers again.
+
+Keep the DNS TTL low (300 s) for event days. The CDN, if configured, keeps
+serving cached segments for a few seconds and then fails over with the origin.
 
 ## Data retention
 

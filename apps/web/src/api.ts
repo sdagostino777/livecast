@@ -77,8 +77,11 @@ export interface Overview {
   ingest: {
     reachable: boolean;
     ready: boolean;
+    backupReady: boolean;
+    currentInput: "primary" | "backup" | null;
     readers: number;
     server: string;
+    backupServer: string;
     publishUser: string;
     hasPublishPass: boolean;
   };
@@ -112,4 +115,19 @@ export interface LiveMeta {
   endedAt: string | null;
   hlsUrl: string;
   pageUrl: string;
+}
+
+export interface ProbeResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+  ms: number;
+}
+
+export interface Checks {
+  origin: ProbeResult;
+  cdn: ProbeResult | null;
+  ingestTcp: boolean;
+  cdnEnabled: boolean;
+  pipeline: string;
 }

@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, CdnTestResult, Me, Overview, PublicUser, Settings, StreamView } from "../api";
+import { api, ApiError, CdnTestResult, Checks, Me, Overview, PublicUser, Settings, StreamView } from "../api";
 import { useBrand } from "../brand";
 import { BrandMark } from "../components/BrandMark";
 import { copyToClipboard, formatDate, formatTime, navigate } from "../router";
@@ -356,7 +356,7 @@ function NewStreamForm({
 }
 
 function ObsPanel({ ov }: { ov: Overview | null }) {
-  const [revealed, setRevealed] = useState<{ server: string; streamKey: string } | null>(null);
+  const [revealed, setRevealed] = useState<{ server: string; backupServer?: string; streamKey: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -374,28 +374,50 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
     }
   }
 
+  const using = ov.ingest.currentInput === "backup" ? "backup" : "principale";
+
   return (
     <div className="obs">
       <div className="obs-head">
         <span className={`dot ${ov.ingest.ready ? "on" : "off"}`} aria-hidden />
-        <span className="small">{ov.ingest.ready ? "OBS collegato" : "OBS non collegato"}</span>
-        {!ov.ingest.reachable && <span className="muted small">(server media non raggiungibile)</span>}
+        <span className="small">Encoder principale: {ov.ingest.ready ? "collegato" : "non collegato"}</span>
       </div>
+      <div className="obs-head">
+        <span className={`dot ${ov.ingest.backupReady ? "on" : "off"}`} aria-hidden />
+        <span className="small">Encoder backup: {ov.ingest.backupReady ? "collegato" : "non collegato"}</span>
+      </div>
+      {!ov.ingest.reachable && <span className="muted small">(server media non raggiungibile)</span>}
+      <p className="muted small">
+        In uso: <b>{ov.ingest.currentInput ? using : "—"}</b>. Se l'encoder principale si interrompe, la regia
+        ripassa da sola sul backup in pochi secondi.
+      </p>
 
       <p className="small">
         In OBS: <b>Server</b> = l'URL completo con credenziali (pulsante sotto), <b>Stream Key</b> vuota.
       </p>
-      <p className="muted small mono ellipsis">Base: {ov.ingest.server}</p>
+      <p className="muted small mono ellipsis">Principale: {ov.ingest.server}</p>
+      <p className="muted small mono ellipsis">Backup: {ov.ingest.backupServer}</p>
 
       {revealed ? (
         <>
-          <p className="muted small">URL completo con credenziali (incollalo in OBS):</p>
+          <p className="muted small">URL completo con credenziali — principale (per OBS):</p>
           <div className="code-row">
             <code className="code">{revealed.server}</code>
             <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.server)}>
               Copia
             </button>
           </div>
+          {revealed.backupServer && (
+            <>
+              <p className="muted small">Backup (per il secondo encoder, se lo usi):</p>
+              <div className="code-row">
+                <code className="code">{revealed.backupServer}</code>
+                <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.backupServer!)}>
+                  Copia
+                </button>
+              </div>
+            </>
+          )}
           <button className="btn btn-ghost btn-small" onClick={() => setRevealed(null)}>
             Nascondi
           </button>
@@ -556,6 +578,7 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cdnResult, setCdnResult] = useState<CdnTestResult | null>(null);
+  const [checks, setChecks] = useState<Checks | null>(null);
 
   useEffect(() => {
     api
@@ -563,6 +586,26 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       .then(setForm)
       .catch(() => setError("Impossibile leggere le impostazioni."));
   }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      api
+        .get<Checks>("/api/admin/checks")
+        .then((c) => alive && setChecks(c))
+        .catch(() => alive && setChecks(null));
+    };
+    tick();
+    const timer = window.setInterval(tick, 10000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  function led(ok: boolean | null) {
+    return <span className={`dot ${ok === null ? "off" : ok ? "on" : ""}`} aria-hidden />;
+  }
 
   if (!form) return null;
 
@@ -618,6 +661,14 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
         </button>
       </div>
 
+      <div className={`banner ${checks?.cdnEnabled ? "banner-ok" : "banner-error"}`} style={{ marginBottom: 18 }}>
+        <span className="small">
+          {checks?.cdnEnabled
+            ? "CDN attiva: impianto adatto a migliaia di spettatori. Controlla che i tre LED siano verdi prima dell'evento."
+            : "Capacità del VPS: fino a ~500 spettatori simultanei il VPS da solo basta. Oltre serve la CDN: imposta l'URL qui sotto e verifica il LED verde."}
+        </span>
+      </div>
+
       <form className="grid-2" onSubmit={save}>
         <label className="field">
           <span>Nome dell'installazione</span>
@@ -625,24 +676,29 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
           <em className="muted">Compare nel pannello, nel player e nel titolo della pagina.</em>
         </label>
         <label className="field">
-          <span>URL pubblico</span>
+          <span className="row">{led(checks?.origin.ok ?? null)} URL pubblico</span>
           <input className="input" value={form.publicBaseUrl} onChange={(e) => setField("publicBaseUrl", e.target.value)} />
-          <em className="muted">Il dominio della diretta, con https://.</em>
+          <em className="muted">Il dominio della diretta, con https://. Il LED verifica che risponda dal server.</em>
         </label>
         <label className="field">
-          <span>CDN (opzionale)</span>
+          <span className="row">
+            {led(checks?.cdnEnabled ? checks.cdn?.ok ?? false : null)} CDN (opzionale)
+          </span>
           <input
             className="input"
             value={form.cdnBaseUrl}
             placeholder="https://cdn.esempio.com"
             onChange={(e) => setField("cdnBaseUrl", e.target.value)}
           />
-          <em className="muted">Vuoto = video servito dal VPS. Se impostata, gli spettatori caricano i segmenti da qui.</em>
+          <em className="muted">
+            Vuoto = spettatori serviti dal VPS. Con una CDN, i segmenti arrivano dall'edge e il VPS regge carichi molto
+            più grandi.
+          </em>
         </label>
         <label className="field">
-          <span>Host ingest OBS</span>
+          <span className="row">{led(checks?.ingestTcp ?? null)} Host ingest OBS</span>
           <input className="input" value={form.ingestHost} onChange={(e) => setField("ingestHost", e.target.value)} />
-          <em className="muted">Può differire dal dominio pubblico (es. IP del VPS).</em>
+          <em className="muted">Può differire dal dominio pubblico (es. IP del VPS). Il LED verifica la porta RTMP.</em>
         </label>
         <label className="field">
           <span>Porta ingest</span>

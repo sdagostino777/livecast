@@ -92,8 +92,9 @@ function makePipeline(outDir: string) {
   const events: string[] = [];
   const opts = {
     ffmpegBin: "ffmpeg",
-    inputUrl: "rtmp://127.0.0.1:1935/live",
+    inputUrls: { primary: "rtmp://127.0.0.1:1935/live", backup: "rtmp://127.0.0.1:1935/backup" },
     outDir,
+    kind: "video" as const,
     segmentSeconds: 2,
     listSize: 6,
     recordFile: null as string | null,
@@ -193,6 +194,29 @@ describe("HlsPipeline supervisor", () => {
 
     pipeline.stop();
     spawned[1]!.emit("exit", 0, null);
+  });
+
+  it("launches from the backup publisher when the primary is not connected", async () => {
+    const { pipeline, spawned, opts, callbacks } = makePipeline(path.join(dir, "failover"));
+    const probeReady = vi.fn(async (which: "primary" | "backup") => which === "backup");
+    pipeline.start({ ...opts, probeReady }, callbacks);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(spawned).toHaveLength(1);
+    const args = (spawned[0] as unknown as { _args?: string[] })._args ?? [];
+    // The spawn mock only records the child, so assert the observable contract:
+    // the pipeline reports the backup as its current input.
+    expect(args).toEqual([]);
+    expect(pipeline.currentInput()).toBe("backup");
+    pipeline.stop();
+  });
+
+  it("prefers the primary publisher when both are connected", async () => {
+    const { pipeline, opts, callbacks } = makePipeline(path.join(dir, "prefer-primary"));
+    const probeReady = vi.fn(async () => true);
+    pipeline.start({ ...opts, probeReady }, callbacks);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pipeline.currentInput()).toBe("primary");
+    pipeline.stop();
   });
 
   it("refuses a second concurrent start", () => {

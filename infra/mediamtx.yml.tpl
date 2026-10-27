@@ -20,8 +20,12 @@ authInternalUsers:
     pass: __PUBLISH_PASS__
     ips: []
     permissions:
+      # A second publisher (a standby encoder) can push to the backup path;
+      # the app switches FFmpeg's input to it when the primary goes quiet.
       - action: publish
         path: live
+      - action: publish
+        path: backup
 
   - user: __READER_USER__
     pass: __READER_PASS__
@@ -29,6 +33,8 @@ authInternalUsers:
     permissions:
       - action: read
         path: live
+      - action: read
+        path: backup
 
   # The control API on loopback is how the panel knows whether OBS is connected.
   # Replacing the default "any" user above would otherwise leave /v3/paths/get
@@ -59,6 +65,10 @@ pprof: no
 
 paths:
   live:
+    source: publisher
+    # The primary encoder is the one that always wins the race; the backup path
+    # exists so an outage of the primary is a restart, not a black screen.
+  backup:
     source: publisher
     # Recording is FFmpeg's job (it already has the decoded stream); MediaMTX
     # writing segments too would double the disk writes for no benefit.

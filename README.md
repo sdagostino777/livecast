@@ -126,6 +126,18 @@ a broadcast from the panel and press play on `/live/<slug>`.
 Runtime settings (public URL, CDN, ingest host/port) live in the database,
 seeded from `PUBLIC_URL`/`INGEST_*` on first boot and editable from the panel.
 
+## Capacity: when the VPS is enough, and when it is not
+
+| Audience | What you need |
+| --- | --- |
+| **up to ~500 viewers** | The VPS alone. 500 × ~2 Mbps ≈ 1 Gbps is already the practical limit of one machine's port, so stay comfortably under it. |
+| **500 – 50,000** | A CDN pull zone in front of `/hls/*`. The origin then serves each segment once per edge, not once per viewer. Set the CDN URL in the panel and watch the LED turn green. |
+| **thousands, one event** | The panel warns when no CDN is configured: it is the one setting that decides whether an event survives its own audience. |
+
+The number is not a promise about one specific VPS: it is the arithmetic
+(viewers × bitrate versus the server's network port). The panel shows the live
+capacity hint and the CDN state, so the operator never has to remember it.
+
 ## What holds when things break
 
 The event-day guarantees are documented as a table in
@@ -140,6 +152,23 @@ and the operator runbook (go-live checklist, CDN attach, troubleshooting) is
 | Media server crashes | systemd restarts it in 2 s; the broadcast resumes on OBS reconnect |
 | API crashes | systemd restarts it; the player keeps its last segments and the page polls |
 | Event-size audience | CDN base URL in the panel — segments are immutable and cache for a year |
+
+## If the server itself dies
+
+No process supervision saves a machine. Losing the VPS means losing the encoder
+and the origin at once — the CDN can keep serving the last cached segments for a
+few seconds, and then everyone sees "signal unavailable". That is the honest
+limit of a single-box install, and it needs a plan, not a promise:
+
+1. **Standby VPS, same code** — provision a second server with the same
+   `APP_NAME` and `APP_DOMAIN`, copy `DATA_DIR` (it is one directory) and the
+   `.env`, and keep the DNS record at a low TTL (300 s). Re-pointing DNS is the
+   whole failover: the same database, credentials and settings come back.
+2. **CDN origin failover** — a CDN that supports multiple origins/fallback
+   zones can switch to the standby origin without DNS changes.
+3. **Publisher-side redundancy** — the primary/backup publish paths cover the
+   other half of the equation: if the *encoder* fails, the show continues; if
+   the *server* fails, no software on it can. The two failures are independent.
 
 ## Tests
 

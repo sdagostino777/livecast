@@ -218,12 +218,18 @@ export interface PipelineApi {
   isActive(): boolean;
   startedAt(): number | null;
   attempts(): number;
+  /** Which publisher the encoder is reading: the primary, or the failover path. */
+  currentInput(): "primary" | "backup" | null;
   start(opts: PipelineStartOptions, callbacks: PipelineCallbacks): void;
   stop(): void;
 }
 
-export interface PipelineStartOptions extends Omit<PipelineArgsOptions, "outDir"> {
+export interface PipelineStartOptions extends Omit<PipelineArgsOptions, "inputUrl" | "outDir"> {
   outDir: string;
+  /** Primary and optional failover publish paths, already resolved to RTMP URLs. */
+  inputUrls: { primary: string; backup: string | null };
+  /** Asked before every launch; the first path that answers true is used. */
+  probeReady?: (which: "primary" | "backup") => Promise<boolean>;
   /** Give up (and end the stream) if nothing is published within this window. */
   ingestWaitSeconds: number;
   recordFile: string | null;
@@ -233,6 +239,7 @@ interface PipelineMeta {
   startedAt: number;
   attempts: number;
   ffmpeg: ChildProcess | null;
+  currentInput: "primary" | "backup";
   stopping: boolean;
   monitorTimer: NodeJS.Timeout | null;
   retryTimer: NodeJS.Timeout | null;
@@ -293,6 +300,7 @@ export class HlsPipeline implements PipelineApi {
       startedAt: this.now(),
       attempts: 0,
       ffmpeg: null,
+      currentInput: "primary",
       stopping: false,
       monitorTimer: null,
       retryTimer: null,
@@ -303,11 +311,12 @@ export class HlsPipeline implements PipelineApi {
       opts,
     };
 
-    this.meta.ingestTimer = setTimeout(() => {
+    const meta = this.meta;
+    meta.ingestTimer = setTimeout(() => {
       if (this.state === "starting") this.finish("ingest_timeout");
     }, opts.ingestWaitSeconds * 1000);
 
-    this.launch();
+    void this.launch();
   }
 
   stop(): void {
@@ -315,14 +324,29 @@ export class HlsPipeline implements PipelineApi {
     this.finish("stopped");
   }
 
-  private launch(): void {
+  private async launch(): Promise<void> {
     const meta = this.meta;
     if (!meta || meta.stopping) return;
 
+    // Failover: ask which publisher is actually connected right now. The primary
+    // always wins when both are; the backup exists so the primary's death is a
+    // two-second relaunch, not a black screen.
+    let which: "primary" | "backup" = "primary";
+    if (meta.opts.probeReady) {
+      try {
+        if (!(await meta.opts.probeReady("primary")) && meta.opts.inputUrls.backup) {
+          which = "backup";
+        }
+      } catch {
+        which = "primary";
+      }
+    }
+    meta.currentInput = which;
+    const inputUrl = which === "backup" && meta.opts.inputUrls.backup ? meta.opts.inputUrls.backup : meta.opts.inputUrls.primary;
     meta.attempts += 1;
     const args = buildFfmpegArgs({
       ffmpegBin: meta.opts.ffmpegBin,
-      inputUrl: meta.opts.inputUrl,
+      inputUrl,
       outDir: meta.opts.outDir,
       kind: meta.opts.kind,
       segmentSeconds: meta.opts.segmentSeconds,
@@ -360,7 +384,7 @@ export class HlsPipeline implements PipelineApi {
       }
       meta.retryTimer = setTimeout(() => {
         meta.retryTimer = null;
-        this.launch();
+        void this.launch();
       }, RETRY_DELAY_MS);
       // Keep a hint of the last error for diagnostics on the next overview call.
       this.lastExit = { code, signal, stderrTail };
@@ -432,6 +456,10 @@ export class HlsPipeline implements PipelineApi {
       // SIGKILL, not SIGINT: a hung encoder ignores the polite signal.
       meta.ffmpeg.kill("SIGKILL");
     }
+  }
+
+  currentInput(): "primary" | "backup" | null {
+    return this.meta?.currentInput ?? null;
   }
 
   private finish(reason: "stopped" | "ingest_timeout" | "fatal"): void {

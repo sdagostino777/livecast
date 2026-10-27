@@ -23,19 +23,19 @@ function withQuery(base: string, user: string, pass: string): string {
 }
 
 /** The OBS "Server" value without credentials, e.g. rtmp://live.example.com:1935/live */
-export function ingestServer(settings: RuntimeSettings): string {
-  return `rtmp://${settings.ingestHost}:${settings.ingestPort}/${config.ingestPath}`;
+export function ingestServer(settings: RuntimeSettings, path: string = config.ingestPath): string {
+  return `rtmp://${settings.ingestHost}:${settings.ingestPort}/${path}`;
 }
 
 /** The full URL to paste into OBS (admin-authenticated page only). Stream key stays empty. */
-export function ingestServerWithCreds(settings: RuntimeSettings): string | null {
+export function ingestServerWithCreds(settings: RuntimeSettings, path: string = config.ingestPath): string | null {
   if (!config.publishPass) return null;
-  return withQuery(ingestServer(settings), config.publishUser, config.publishPass);
+  return withQuery(ingestServer(settings, path), config.publishUser, config.publishPass);
 }
 
 /** What FFmpeg reads on loopback, e.g. rtmp://127.0.0.1:1935/live?user=reader&pass=… */
-export function mediaInputUrl(): string {
-  const base = config.mediamtxRtmpUrl.replace(/\/+$/, "") + `/${config.ingestPath}`;
+export function mediaInputUrl(path: string = config.ingestPath): string {
+  const base = config.mediamtxRtmpUrl.replace(/\/+$/, "") + `/${path}`;
   if (!config.mediaReadUser) return base;
   return withQuery(base, config.mediaReadUser, config.mediaReadPass);
 }
