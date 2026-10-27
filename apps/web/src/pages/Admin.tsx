@@ -202,6 +202,43 @@ export function Admin() {
   }
 
   /**
+   * Starts a new event: a new row with a new link, carrying over the artwork and
+   * the palette so the operator does not have to rebuild what they just set.
+   */
+  async function createNewEvent() {
+    if (!current) return;
+    await act(async () => {
+      const previous = current;
+      const carried: Array<{ kind: "poster" | "icon"; name: string; file: Blob }> = [];
+      for (const [kind, url] of [
+        ["poster", previous.posterImageUrl],
+        ["icon", previous.iconUrl],
+      ] as const) {
+        if (!url) continue;
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+        carried.push({ kind, name: `${kind}.${ext}`, file: blob });
+      }
+      const created = await api.post<{ stream: StreamView }>("/api/admin/streams", {
+        title: titleDraft.trim() || previous.title,
+        kind: previous.kind,
+        record: previous.record,
+      });
+      const id = created.stream.id;
+      await api.patch(`/api/admin/streams/${id}`, {
+        posterPalette: previous.posterPalette,
+        posterOverlay: previous.posterOverlay,
+      });
+      for (const item of carried) {
+        await uploadStreamImage(id, item.kind, new File([item.file], item.name, { type: item.file.type }));
+      }
+      notify("Nuovo evento: il link è cambiato.");
+    });
+  }
+
+  /**
    * An image chosen for an event that already exists uploads immediately: the
    * panel has no save button, so waiting for one meant nothing happened.
    */
@@ -441,6 +478,7 @@ export function Admin() {
           setTitleDraft={setTitleDraft}
           onAutoSave={autoSaveConfig}
           onCreate={saveConfig}
+          onNewEvent={createNewEvent}
           onUploadImage={uploadImage}
         />
 
@@ -586,6 +624,7 @@ function BroadcastConfig({
   setTitleDraft,
   onAutoSave,
   onCreate,
+  onNewEvent,
   onUploadImage,
 }: {
   previewTick: number;
@@ -606,6 +645,7 @@ function BroadcastConfig({
     record: boolean,
     files: { poster?: File; icon?: File; palette?: string | null },
   ) => Promise<void>;
+  onNewEvent: () => Promise<void>;
   onUploadImage: (kind: "poster" | "icon", file: File) => Promise<void>;
 }) {
   const [kind, setKind] = useState<"video" | "audio">("video");
@@ -837,13 +877,7 @@ function BroadcastConfig({
               type="button"
               className="btn btn-ghost btn-small"
               disabled={busy || !titleDraft.trim()}
-              onClick={() =>
-                void onCreate(titleDraft.trim(), kind, record, {
-                  palette,
-                  ...(posterFile ? { poster: posterFile } : {}),
-                  ...(iconFile ? { icon: iconFile } : {}),
-                })
-              }
+              onClick={() => void onNewEvent()}
             >
               Nuovo evento (link nuovo)
             </button>
