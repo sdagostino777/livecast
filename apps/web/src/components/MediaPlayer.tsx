@@ -154,8 +154,9 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
   const overlay = notStarted ? (
     <div className="player-overlay">
       <div className="player-message">
-        <p className="player-message-title">La diretta non è ancora iniziata</p>
-        <p className="muted small">Torna qui all'orario previsto.</p>
+        {title && <p className="player-message-title">{title}</p>}
+        <p className={title ? "muted small" : "player-message-title"}>La diretta non è ancora iniziata</p>
+        {title && <p className="muted small">Torna qui all'orario previsto.</p>}
       </div>
     </div>
   ) : ended ? (
@@ -179,7 +180,7 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
 
   return (
     <div className={`player-frame${kind === "audio" ? " audio" : ""}`}>
-      {posterUrl && kind === "video" && !playing && (
+      {posterUrl && !playing && (
         <img className="player-poster" src={posterUrl} alt="" aria-hidden />
       )}
 

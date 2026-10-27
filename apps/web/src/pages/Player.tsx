@@ -15,6 +15,33 @@ export function Player({ slug }: { slug: string }) {
   const [notFound, setNotFound] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
 
+  // One heartbeat per open page; the panel counts the ones seen in the last
+  // minute, so nothing needs cleaning up when a tab is closed.
+  useEffect(() => {
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    let alive = true;
+    const beat = () => {
+      if (!alive || document.hidden) return;
+      void fetch(`/api/live/${slug}/presence`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    beat();
+    const timer = window.setInterval(beat, 20000);
+    const onVisible = () => {
+      if (!document.hidden) beat();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [slug]);
+
   useEffect(() => {
     let alive = true;
     async function tick() {

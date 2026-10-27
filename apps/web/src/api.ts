@@ -59,12 +59,14 @@ export interface StreamView {
   title: string;
   status: "draft" | "starting" | "live" | "ended";
   kind: "video" | "audio";
-  posterUrl: string | null;
+  posterUrl: string;
+  posterImageUrl: string | null;
   iconUrl: string | null;
   fallbackPosterUrl: string;
   adminPosterUrl: string;
   adminIconUrl: string;
   posterPalette: string | null;
+  posterOverlay: boolean;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -76,6 +78,8 @@ export interface Overview {
   serverTime: string;
   publicUrl: string;
   stream: StreamView | null;
+  /** People with the player page open right now. */
+  viewers: number;
   pipeline: {
     status: "idle" | "starting" | "live" | "ended";
     attempts: number;
@@ -117,10 +121,12 @@ export interface CdnTestResult {
 export interface LiveMeta {
   slug: string;
   title: string;
-  status: "starting" | "live" | "ended";
+  status: "draft" | "starting" | "live" | "ended";
   kind: "video" | "audio";
-  posterUrl: string | null;
+  posterUrl: string;
+  posterImageUrl: string | null;
   iconUrl: string | null;
+  posterOverlay: boolean;
   fallbackPosterUrl: string;
   startedAt: string | null;
   endedAt: string | null;
@@ -169,8 +175,13 @@ export async function uploadStreamImage(
 }
 
 /** What to show for a broadcast: the uploaded poster, else the generated one. */
-export function posterSrc(stream: { posterUrl: string | null; adminPosterUrl: string }): string {
-  return stream.posterUrl ?? stream.adminPosterUrl;
+/**
+ * Panel preview: always the admin artwork URL, which renders exactly what the
+ * audience gets (uploaded image, title overlay, or template) and is never
+ * cached, so editing the title or the palette updates it immediately.
+ */
+export function posterSrc(stream: { adminPosterUrl: string }): string {
+  return stream.adminPosterUrl;
 }
 
 export function iconSrc(stream: { iconUrl: string | null; adminIconUrl: string }): string {

@@ -20,6 +20,7 @@ export interface StreamRow {
   poster_ext: string | null;
   icon_ext: string | null;
   poster_palette: string | null;
+  poster_overlay: number;
   record: number;
   created_by: string | null;
   started_at: string | null;
@@ -33,13 +34,18 @@ export interface StreamView {
   title: string;
   status: StreamStatus;
   kind: "video" | "audio";
-  posterUrl: string | null;
+  /** Artwork the audience sees: uploaded image (title optional) or the template. */
+  posterUrl: string;
+  /** The uploaded image itself, null when the artwork is generated. */
+  posterImageUrl: string | null;
   iconUrl: string | null;
-  /** Generated template artwork, used whenever no image was uploaded. */
+  /** Kept for clients that ask for the template explicitly. */
   fallbackPosterUrl: string;
   adminPosterUrl: string;
   adminIconUrl: string;
   posterPalette: string | null;
+  /** Draw the event title over the uploaded image. */
+  posterOverlay: boolean;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -54,12 +60,14 @@ export function toView(row: StreamRow, publicBaseUrl: string = process.env.PUBLI
     title: row.title,
     status: row.status,
     kind: row.kind,
-    posterUrl: row.poster_ext ? `/uploads/${row.slug}.poster.${row.poster_ext}` : null,
+    posterUrl: `/api/poster/${row.slug}`,
+    posterImageUrl: row.poster_ext ? `/uploads/${row.slug}.poster.${row.poster_ext}` : null,
     iconUrl: row.icon_ext ? `/uploads/${row.slug}.icon.${row.icon_ext}` : null,
     fallbackPosterUrl: `/api/poster/${row.slug}`,
     adminPosterUrl: `/api/admin/poster/${row.id}`,
     adminIconUrl: `/api/admin/icon/${row.id}`,
     posterPalette: row.poster_palette,
+    posterOverlay: row.poster_overlay === 1,
     record: row.record === 1,
     startedAt: row.started_at,
     endedAt: row.ended_at,

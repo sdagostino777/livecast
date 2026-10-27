@@ -183,9 +183,12 @@ describe("admin + public stream lifecycle", () => {
     expect(stream.slug).toMatch(/^[a-z0-9]{10}$/);
     expect(stream.status).toBe("draft");
 
-    // A draft must not be a public URL.
+    // The shared link answers before the broadcast starts: viewers open it
+    // early and must see the event name and artwork while they wait.
     const draftPage = await app.inject({ method: "GET", url: `/api/live/${stream.slug}` });
-    expect(draftPage.statusCode).toBe(404);
+    expect(draftPage.statusCode).toBe(200);
+    expect(draftPage.json().status).toBe("draft");
+    expect(draftPage.json().posterUrl).toBe(`/api/poster/${stream.slug}`);
 
     const start = await app.inject({
       method: "POST",
@@ -504,10 +507,30 @@ describe("admin + public stream lifecycle", () => {
       payload: png,
     });
     expect(uploaded.statusCode).toBe(200);
-    expect(uploaded.json().stream.posterUrl).toBe(`/uploads/${stream.slug}.poster.png`);
+    expect(uploaded.json().stream.posterImageUrl).toBe(`/uploads/${stream.slug}.poster.png`);
+    expect(uploaded.json().stream.posterUrl).toBe(`/api/poster/${stream.slug}`);
 
-    const served = await app.inject({ method: "GET", url: uploaded.json().stream.posterUrl });
+    const served = await app.inject({ method: "GET", url: uploaded.json().stream.posterImageUrl });
     expect(served.statusCode).toBe(200);
+
+    // Without the overlay the artwork is the uploaded file itself…
+    const plainArtwork = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
+    expect(plainArtwork.statusCode).toBe(200);
+    expect(plainArtwork.headers["content-type"]).toContain("image/png");
+
+    // …and with it, an SVG that embeds the image and draws the title.
+    const overlay = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { posterOverlay: true },
+    });
+    expect(overlay.statusCode).toBe(200);
+    expect(overlay.json().stream.posterOverlay).toBe(true);
+    const composedArtwork = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
+    expect(composedArtwork.headers["content-type"]).toContain("image/svg+xml");
+    expect(composedArtwork.body).toContain("Evento con poster");
+    expect(composedArtwork.body).toContain(`/uploads/${stream.slug}.poster.png`);
 
     const bogus = await app.inject({
       method: "POST",
@@ -528,7 +551,7 @@ describe("admin + public stream lifecycle", () => {
 
     const removed = await app.inject({ method: "DELETE", url: `/api/admin/streams/${stream.id}/poster`, headers: { cookie } });
     expect(removed.statusCode).toBe(200);
-    expect(removed.json().stream.posterUrl).toBeNull();
+    expect(removed.json().stream.posterImageUrl).toBeNull();
   });
 
   it("freezes title and palette once on air, and allows them again when ended", async () => {
@@ -666,11 +689,13 @@ describe("admin + public stream lifecycle", () => {
     });
     const stream = created.json().stream;
     expect(stream.fallbackPosterUrl).toBe(`/api/poster/${stream.slug}`);
-    expect(stream.posterUrl).toBeNull();
+    expect(stream.posterUrl).toBe(`/api/poster/${stream.slug}`);
+    expect(stream.posterImageUrl).toBeNull();
 
-    // A draft's public template must not exist (the title is still private).
+    // The template is public from the start, which is what the shared link shows.
     const draftPoster = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
-    expect(draftPoster.statusCode).toBe(404);
+    expect(draftPoster.statusCode).toBe(200);
+    expect(draftPoster.body).toContain("Congresso");
 
     // The admin variant works for any status.
     const adminPoster = await app.inject({ method: "GET", url: `/api/admin/poster/${stream.id}`, headers: { cookie } });
@@ -691,6 +716,53 @@ describe("admin + public stream lifecycle", () => {
     const publicPoster = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
     expect(publicPoster.statusCode).toBe(200);
     expect(publicPoster.body.startsWith("<svg")).toBe(true);
+  });
+
+  it("counts the player pages that are open, and forgets the closed ones", async () => {
+    const cookie = await login();
+    const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Evento contato" } });
+    const stream = created.json().stream;
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+
+    const beat = (id: string) =>
+      app.inject({ method: "POST", url: `/api/live/${stream.slug}/presence`, payload: { id } });
+
+    expect((await beat("viewer-one")).json().viewers).toBe(1);
+    expect((await beat("viewer-two")).json().viewers).toBe(2);
+    // The same tab beating again is one viewer, not three.
+    expect((await beat("viewer-one")).json().viewers).toBe(2);
+
+    const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: { cookie } });
+    expect(overview.json().viewers).toBe(2);
+
+    // The panel never shows a number it cannot explain.
+    expect((await app.inject({ method: "POST", url: `/api/live/${stream.slug}/presence`, payload: {} })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/api/live/aaaaaaaaaa/presence", payload: { id: "x-viewer" } })).statusCode).toBe(404);
+  });
+
+  it("freezes the title overlay while on air", async () => {
+    const cookie = await login();
+    const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Evento overlay" } });
+    const stream = created.json().stream;
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    await app.inject({
+      method: "POST",
+      url: `/api/admin/streams/${stream.id}/poster`,
+      headers: { cookie, "content-type": "image/png" },
+      payload: png,
+    });
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+
+    const blocked = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { posterOverlay: true },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error).toBe("stream_on_air");
   });
 
   it("rejects unknown and malformed stream slugs", async () => {

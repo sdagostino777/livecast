@@ -123,9 +123,13 @@ export function Admin() {
     };
   }, [refresh]);
 
+  // The panel polls: "Preparazione…" must become "In onda" by itself the moment
+  // the first segment lands, without the operator reloading the page.
   useEffect(() => {
-    if (!me?.mustChangePassword) return;
-    const timer = window.setInterval(() => void refresh(), 5000);
+    if (!me || me.mustChangePassword) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, 4000);
     return () => window.clearInterval(timer);
   }, [me, refresh]);
 
@@ -155,6 +159,8 @@ export function Admin() {
   }, [devicePreview]);
 
   const active = ov?.stream ?? null;
+  /** When the current broadcast went on air, for the elapsed-time counter. */
+  const onlineSince = ov?.pipeline.startedAt ?? current?.startedAt ?? null;
   const onAir = Boolean(active);
 
   async function act(fn: () => Promise<void>) {
@@ -201,6 +207,7 @@ export function Admin() {
     kind?: "video" | "audio";
     record?: boolean;
     posterPalette?: string | null;
+    posterOverlay?: boolean;
   }) {
     if (!current) return; // the first save uses the create button
     try {
@@ -393,9 +400,14 @@ export function Admin() {
             {active?.status === "live" && <span className="blink-dot" aria-hidden />}
             {statusLabel(ov)}
           </span>
+          {active && (
+            <span className="pill viewers" title="Persone collegate in questo momento">
+              {ov?.viewers ?? 0} {(ov?.viewers ?? 0) === 1 ? "collegato" : "collegati"}
+            </span>
+          )}
         </div>
 
-        {current && current.status !== "draft" && (
+        {current && (
           <div className="share-row">
             <span className="small muted">Link della diretta</span>
             <code className="code share-url">{current.pageUrl}</code>
@@ -485,6 +497,7 @@ export function Admin() {
                 <button className="btn btn-ghost btn-small" disabled={busy || !current} onClick={() => void publishFromBrowser("screen")}>
                   Collega schermo
                 </button>
+                  {onAir && <OnlineTimer startedAt={onlineSince} />}
                 </div>
               </div>
             ) : (
@@ -493,10 +506,11 @@ export function Admin() {
                   {pubKind === "camera" ? "Camera" : "Schermo"} collegato — <b>{onAir ? "in onda" : "anteprima"}</b>
                   {!onAir && ": nessuno ti vede finché non premi ● ONLINE"}
                 </span>
-                <div>
+                <div className="row wrap">
                   <button className="btn btn-ghost btn-small" disabled={busy} onClick={stopPublishing}>
                     Scollega
                   </button>
+                  {onAir && <OnlineTimer startedAt={onlineSince} />}
                 </div>
               </div>
             )}
@@ -585,11 +599,18 @@ function BroadcastConfig({
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState(false);
   const posterRef = useRef<HTMLInputElement | null>(null);
   const saveTimer = useRef<number | null>(null);
 
   /** Everything here saves itself: the panel has no "Salva" button. */
-  function autoSave(patch: { title?: string; kind?: "video" | "audio"; record?: boolean; posterPalette?: string | null }) {
+  function autoSave(patch: {
+    title?: string;
+    kind?: "video" | "audio";
+    record?: boolean;
+    posterPalette?: string | null;
+    posterOverlay?: boolean;
+  }) {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       void onAutoSave(patch);
@@ -601,8 +622,9 @@ function BroadcastConfig({
     setKind(current.kind);
     setRecord(current.record);
     setPalette(current.posterPalette);
+    setOverlay(current.posterOverlay);
     setTitleDraft(current.title);
-  }, [current?.id, current?.kind, current?.record, current?.posterPalette]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.id, current?.kind, current?.record, current?.posterPalette, current?.posterOverlay, current?.title]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -721,7 +743,7 @@ function BroadcastConfig({
               }}
             />
             <button type="button" className="btn btn-ghost btn-small" disabled={onAir} onClick={() => posterRef.current?.click()}>
-              {posterFile || current?.posterUrl ? "Cambia immagine" : "Carica immagine"}
+              {posterFile || current?.posterImageUrl ? "Cambia immagine" : "Carica immagine"}
             </button>
             <label className="btn btn-ghost btn-small" style={{ cursor: onAir ? "not-allowed" : "pointer" }}>
               {current?.iconUrl ? "Cambia icona" : "Carica icona"}
@@ -737,6 +759,20 @@ function BroadcastConfig({
               />
             </label>
           </div>
+          {(posterFile || current?.posterImageUrl) && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={overlay}
+                disabled={onAir || (!posterFile && !current?.posterImageUrl)}
+                onChange={(event) => {
+                  setOverlay(event.target.checked);
+                  autoSave({ posterOverlay: event.target.checked });
+                }}
+              />
+              Mostra il nome dell'evento sopra l'immagine
+            </label>
+          )}
         </div>
 
         <div className="stack" style={{ gap: 8 }}>
@@ -765,8 +801,54 @@ function BroadcastConfig({
             </button>
           </div>
         )}
+
+        {current?.status === "ended" && (
+          <div className="stack" style={{ gap: 6 }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              disabled={busy || !titleDraft.trim()}
+              onClick={() =>
+                void onCreate(titleDraft.trim(), kind, record, {
+                  palette,
+                  ...(posterFile ? { poster: posterFile } : {}),
+                  ...(iconFile ? { icon: iconFile } : {}),
+                })
+              }
+            >
+              Nuovo evento (link nuovo)
+            </button>
+            <span className="small muted" style={{ margin: 0 }}>
+              Ogni evento ha il suo link: questo ne genera uno nuovo e archivia il precedente.
+            </span>
+          </div>
+        )}
       </div>
     </form>
+  );
+}
+
+/**
+ * Elapsed time on air. Small, right-aligned, and it counts from the moment the
+ * pipeline started — not from when the page was opened.
+ */
+function OnlineTimer({ startedAt }: { startedAt: string | null }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (!startedAt) return null;
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+  const seconds = String(elapsed % 60).padStart(2, "0");
+  const minutes = String(Math.floor(elapsed / 60) % 60).padStart(2, "0");
+  const hours = Math.floor(elapsed / 3600);
+  return (
+    <span className="online-timer" title="Tempo in onda" aria-label="tempo in onda">
+      <span className="blink-dot" aria-hidden />
+      {hours > 0 ? `${hours}:${minutes}:${seconds}` : `${minutes}:${seconds}`}
+    </span>
   );
 }
 

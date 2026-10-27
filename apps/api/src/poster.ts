@@ -90,6 +90,39 @@ export function posterSvg(opts: { title: string; brand: string; seed: string; pa
 </svg>`;
 }
 
+/**
+ * Title over an uploaded image.
+ *
+ * Compositing raster text would need an image library; an SVG that embeds the
+ * uploaded file costs nothing, stays sharp at every size, and is a normal <img>
+ * source for both the panel and the player.
+ */
+export function overlaySvg(opts: { imageHref: string; title: string; brand: string }): string {
+  const lines = wrapTitle(opts.title);
+  const fontSize = lines.some((line) => line.length > 18) ? 54 : 66;
+  const lineHeight = fontSize * 1.16;
+  const firstY = 616 - ((lines.length - 1) * lineHeight);
+  const text = lines
+    .map(
+      (line, index) =>
+        `<text x="64" y="${Math.round(firstY + index * lineHeight)}" font-family="Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="700" fill="#ffffff">${escapeXml(line)}</text>`,
+    )
+    .join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="${escapeXml(opts.title)}">
+  <defs>
+    <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="45%" stop-color="#04101d" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#04101d" stop-opacity="0.88"/>
+    </linearGradient>
+  </defs>
+  <image x="0" y="0" width="1280" height="720" preserveAspectRatio="xMidYMid slice" href="${escapeXml(opts.imageHref)}" xlink:href="${escapeXml(opts.imageHref)}"/>
+  <rect width="1280" height="720" fill="url(#scrim)"/>
+  <text x="64" y="92" font-family="Helvetica, Arial, sans-serif" font-size="24" font-weight="600" letter-spacing="3" fill="#ffffff" opacity="0.8">${escapeXml(opts.brand.toUpperCase())}</text>
+  ${text}
+</svg>`;
+}
+
 /** Square variant for lists: initials over the same gradient. */
 /** The explicit choice wins; the slug-derived palette is the fallback. */
 export function paletteByName(name?: string | null): (typeof PALETTES)[number] | null {

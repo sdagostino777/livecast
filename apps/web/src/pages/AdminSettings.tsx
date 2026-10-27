@@ -118,6 +118,13 @@ export function AdminSettings() {
             notify("Palette aggiornata.");
           });
         }}
+        onOverlay={(value) => {
+          if (!latest) return;
+          void act(async () => {
+            await api.patch(`/api/admin/streams/${latest.id}`, { posterOverlay: value });
+            notify(value ? "Nome sopra l'immagine attivo." : "Nome sopra l'immagine disattivo.");
+          });
+        }}
         onUpload={(kind, file) => {
         if (!latest) return;
           void act(async () => {
@@ -212,12 +219,14 @@ function EventImagesSection({
   onUpload,
   onRemove,
   onPalette,
+  onOverlay,
 }: {
   latest: StreamView | null;
   busy: boolean;
   onUpload: (kind: "poster" | "icon", file: File) => void;
   onRemove: (kind: "poster" | "icon") => void;
   onPalette: (palette: string | null) => void;
+  onOverlay: (value: boolean) => void;
 }) {
   const posterRef = useRef<HTMLInputElement | null>(null);
   const iconRef = useRef<HTMLInputElement | null>(null);
@@ -238,7 +247,7 @@ function EventImagesSection({
               <b>Poster</b> (16:9): compare al posto del video prima che lo spettatore premi play.
             </p>
             <img className="upload-preview poster-preview" src={posterSrc(latest)} alt="Poster della diretta" />
-            {!latest.posterUrl && (
+            {!latest.posterImageUrl && (
               <>
                 <p className="muted small" style={{ margin: 0 }}>
                   Template automatico con il titolo dell'evento. Scegli la palette:
@@ -267,6 +276,17 @@ function EventImagesSection({
                 )}
               </>
             )}
+            {latest.posterImageUrl && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={latest.posterOverlay}
+                  disabled={busy}
+                  onChange={(event) => onOverlay(event.target.checked)}
+                />
+                Mostra il nome dell'evento sopra l'immagine
+              </label>
+            )}
             <div className="row wrap">
               <input
                 ref={posterRef}
@@ -282,7 +302,7 @@ function EventImagesSection({
               <button className="btn btn-primary btn-small" disabled={busy} onClick={() => posterRef.current?.click()}>
                 Carica poster
               </button>
-              {latest.posterUrl && (
+              {latest.posterImageUrl && (
                 <button className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => onRemove("poster")}>
                   Rimuovi
                 </button>

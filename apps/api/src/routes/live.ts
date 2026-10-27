@@ -1,33 +1,53 @@
 /**
  * Public viewer API.
  *
- * No PIN and no session: the link is the access control, by decision. What this
- * route still does is refuse to reveal a draft stream — a draft exists before
- * anyone speaks to anyone, and its slug should not be a valid URL until the
- * broadcaster has created a real event.
+ * No PIN and no session: the link is the access control, by decision. The link
+ * has to work before the broadcast starts — people open it early and must see
+ * the event name and poster while they wait — so every state answers.
  *
  * `hlsUrl` is absolute and points at the CDN when one is configured, so the
  * player code never needs to know where delivery happens.
  */
 import type { FastifyInstance } from "fastify";
+import fs from "node:fs";
+import { z } from "zod";
+
+import { artworkFor } from "../artwork.js";
 import { isSlug } from "../ids.js";
+import { touchViewer } from "../presence.js";
 import { getStreamBySlug, toView } from "../streams.js";
-import { posterSvg } from "../poster.js";
+
+const PresenceBody = z.object({ id: z.string().min(4).max(64) });
 
 export async function liveRoutes(app: FastifyInstance): Promise<void> {
-  // Generated poster template. Public only for broadcasts that are already
-  // public (drafts keep their title inside the panel); the panel uses the admin
-  // variant so a draft still gets artwork for its preview.
+  // The event artwork: the uploaded image (with the title drawn on top when the
+  // operator asked for it) or the generated template.
   app.get("/api/poster/:slug", async (req, reply) => {
     const { slug } = req.params as { slug?: string };
     if (!slug || !isSlug(slug)) return reply.code(404).send({ error: "not_found" });
     const row = getStreamBySlug(app.db, slug);
-    if (!row || row.status === "draft") return reply.code(404).send({ error: "not_found" });
-    reply
-      .header("content-type", "image/svg+xml; charset=utf-8")
-      .header("cache-control", "public, max-age=300")
-      .header("x-robots-tag", "noindex");
-    return posterSvg({ title: row.title, brand: app.settings.get().brandName, seed: row.slug, palette: row.poster_palette });
+    if (!row) return reply.code(404).send({ error: "not_found" });
+    const art = artworkFor(row, app.settings.get().brandName);
+    reply.header("cache-control", "public, max-age=60").header("x-robots-tag", "noindex");
+    if (art.kind === "file") {
+      reply.header("content-type", art.contentType);
+      return reply.send(fs.createReadStream(art.file));
+    }
+    reply.header("content-type", "image/svg+xml; charset=utf-8");
+    return art.body;
+  });
+
+  // Heartbeat from an open player page: the panel shows how many people are
+  // connected. Public because watching is public; no history is kept.
+  app.post("/api/live/:slug/presence", async (req, reply) => {
+    const { slug } = req.params as { slug?: string };
+    if (!slug || !isSlug(slug)) return reply.code(404).send({ error: "not_found" });
+    const row = getStreamBySlug(app.db, slug);
+    if (!row) return reply.code(404).send({ error: "not_found" });
+    const parsed = PresenceBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid_request" });
+    reply.header("cache-control", "no-store");
+    return { viewers: touchViewer(row.slug, parsed.data.id) };
   });
 
   app.get("/api/live/:slug", async (req, reply) => {
@@ -35,7 +55,7 @@ export async function liveRoutes(app: FastifyInstance): Promise<void> {
     if (!slug || !isSlug(slug)) return reply.code(404).send({ error: "not_found" });
 
     const row = getStreamBySlug(app.db, slug);
-    if (!row || row.status === "draft") return reply.code(404).send({ error: "not_found" });
+    if (!row) return reply.code(404).send({ error: "not_found" });
 
     const settings = app.settings.get();
     const view = toView(row, settings.publicBaseUrl);

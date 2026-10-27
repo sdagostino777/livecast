@@ -42,7 +42,9 @@ import net from "node:net";
 import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
-import { iconSvg, posterSvg } from "../poster.js";
+import { artworkFor, posterFile } from "../artwork.js";
+import { countViewers } from "../presence.js";
+import { iconSvg } from "../poster.js";
 import { journalLines, recentInMemory, remember } from "../services/logs.js";
 import { ingestServer, ingestServerWithCreds, mediaInputUrl, mediaRtspInputUrl } from "../ingest.js";
 
@@ -67,6 +69,7 @@ const ResetPasswordBody = z.object({
 });
 
 const PatchStreamBody = z.object({
+  posterOverlay: z.boolean().optional(),
   title: z.string().trim().min(1).max(120).optional(),
   kind: z.enum(["video", "audio"]).optional(),
   record: z.boolean().optional(),
@@ -170,6 +173,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       serverTime: nowIso(),
       publicUrl: settings.publicBaseUrl,
       stream: active ? toView(active, settings.publicBaseUrl) : null,
+      viewers: active ? countViewers(active.slug) : 0,
       pipeline: {
         status: app.pipeline.status,
         attempts: app.pipeline.attempts(),
@@ -384,6 +388,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (onAir && body.data.posterPalette !== undefined) {
       return reply.code(409).send({ error: "stream_on_air" });
     }
+    if (onAir && body.data.posterOverlay !== undefined) {
+      return reply.code(409).send({ error: "stream_on_air" });
+    }
     // Kind and recording shape the encoder, so they are editable while the
     // broadcast is idle (draft or ended) and frozen once it is on air.
     if (onAir && body.data.kind !== undefined) {
@@ -400,6 +407,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     if (body.data.posterPalette !== undefined) {
       app.db.prepare("UPDATE streams SET poster_palette = ? WHERE id = ?").run(body.data.posterPalette, stream.id);
+    }
+    if (body.data.posterOverlay !== undefined) {
+      app.db.prepare("UPDATE streams SET poster_overlay = ? WHERE id = ?").run(body.data.posterOverlay ? 1 : 0, stream.id);
     }
     return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
   });
@@ -580,8 +590,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!stream) return reply.code(404).send({ error: "not_found" });
     // no-store: this artwork is rendered from the title and palette the operator
     // is editing right now; a cached copy made the preview look frozen.
+    const art = artworkFor(stream, app.settings.get().brandName);
+    if (art.kind === "file") {
+      reply.header("content-type", art.contentType).header("cache-control", "no-store");
+      return reply.send(fs.createReadStream(art.file));
+    }
     reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "no-store");
-    return posterSvg({ title: stream.title, brand: app.settings.get().brandName, seed: stream.slug, palette: stream.poster_palette });
+    return art.body;
   });
 
   app.get("/api/admin/icon/:id", async (req, reply) => {
