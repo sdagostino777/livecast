@@ -34,6 +34,10 @@ export interface StreamView {
   kind: "video" | "audio";
   posterUrl: string | null;
   iconUrl: string | null;
+  /** Generated template artwork, used whenever no image was uploaded. */
+  fallbackPosterUrl: string;
+  adminPosterUrl: string;
+  adminIconUrl: string;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -50,6 +54,9 @@ export function toView(row: StreamRow, publicBaseUrl: string = process.env.PUBLI
     kind: row.kind,
     posterUrl: row.poster_ext ? `/uploads/${row.slug}.poster.${row.poster_ext}` : null,
     iconUrl: row.icon_ext ? `/uploads/${row.slug}.icon.${row.icon_ext}` : null,
+    fallbackPosterUrl: `/api/poster/${row.slug}`,
+    adminPosterUrl: `/api/admin/poster/${row.id}`,
+    adminIconUrl: `/api/admin/icon/${row.id}`,
     record: row.record === 1,
     startedAt: row.started_at,
     endedAt: row.ended_at,

@@ -63,7 +63,7 @@ export function Player({ slug }: { slug: string }) {
           ended={meta?.status === "ended"}
           title={meta?.title ?? ""}
           brand={brand}
-          posterUrl={meta?.posterUrl}
+          posterUrl={meta?.posterUrl ?? meta?.fallbackPosterUrl ?? null}
         />
       </main>
       <footer className="player-footer">

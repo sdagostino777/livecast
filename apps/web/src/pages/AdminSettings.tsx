@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, Me, PublicUser, StreamView, uploadStreamImage } from "../api";
+import { api, ApiError, iconSrc, Me, posterSrc, PublicUser, StreamView, uploadStreamImage } from "../api";
 import { useBrand } from "../brand";
 import { BrandMark } from "../components/BrandMark";
 import { formatDate, navigate } from "../router";
@@ -216,11 +216,8 @@ function EventImagesSection({
             <p className="small" style={{ margin: 0 }}>
               <b>Poster</b> (16:9): compare al posto del video prima che lo spettatore premi play.
             </p>
-            {latest.posterUrl ? (
-              <img className="upload-preview poster-preview" src={latest.posterUrl} alt="Poster della diretta" />
-            ) : (
-              <div className="upload-preview placeholder">Nessun poster</div>
-            )}
+            <img className="upload-preview poster-preview" src={posterSrc(latest)} alt="Poster della diretta" />
+            {!latest.posterUrl && <p className="muted small">Template automatico: carica un'immagine per sostituirlo.</p>}
             <div className="row wrap">
               <input
                 ref={posterRef}
@@ -248,11 +245,8 @@ function EventImagesSection({
             <p className="small" style={{ margin: 0 }}>
               <b>Icona</b> (quadrata): compare negli elenchi delle dirette e accanto al titolo.
             </p>
-            {latest.iconUrl ? (
-              <img className="upload-preview icon-preview" src={latest.iconUrl} alt="Icona della diretta" />
-            ) : (
-              <div className="upload-preview placeholder square">Nessuna icona</div>
-            )}
+            <img className="upload-preview icon-preview" src={iconSrc(latest)} alt="Icona della diretta" />
+            {!latest.iconUrl && <p className="muted small">Icona generata dalle iniziali del titolo.</p>}
             <div className="row wrap">
               <input
                 ref={iconRef}

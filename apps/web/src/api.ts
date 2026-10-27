@@ -61,6 +61,9 @@ export interface StreamView {
   kind: "video" | "audio";
   posterUrl: string | null;
   iconUrl: string | null;
+  fallbackPosterUrl: string;
+  adminPosterUrl: string;
+  adminIconUrl: string;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -117,6 +120,7 @@ export interface LiveMeta {
   kind: "video" | "audio";
   posterUrl: string | null;
   iconUrl: string | null;
+  fallbackPosterUrl: string;
   startedAt: string | null;
   endedAt: string | null;
   hlsUrl: string;
@@ -161,4 +165,13 @@ export async function uploadStreamImage(
     throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`);
   }
   return ((await res.json()) as { stream: StreamView }).stream;
+}
+
+/** What to show for a broadcast: the uploaded poster, else the generated one. */
+export function posterSrc(stream: { posterUrl: string | null; adminPosterUrl: string }): string {
+  return stream.posterUrl ?? stream.adminPosterUrl;
+}
+
+export function iconSrc(stream: { iconUrl: string | null; adminIconUrl: string }): string {
+  return stream.iconUrl ?? stream.adminIconUrl;
 }

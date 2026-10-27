@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, Checks, Me, Overview, Settings, StreamView, uploadStreamImage } from "../api";
+import { api, ApiError, Checks, iconSrc, Me, Overview, posterSrc, Settings, StreamView, uploadStreamImage } from "../api";
 import { useBrand } from "../brand";
 import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
@@ -369,11 +369,7 @@ export function Admin() {
           <div className="stack">
             <div className="row-between">
               <div className="row" style={{ alignItems: "flex-start" }}>
-                {current.posterUrl ? (
-                  <img className="thumb poster-thumb" src={current.posterUrl} alt="" />
-                ) : (
-                  <span className="thumb poster-thumb placeholder" aria-hidden />
-                )}
+                <img className="thumb poster-thumb" src={posterSrc(current)} alt="" />
                 <div>
                   {editingTitle ? (
                     <form
@@ -488,7 +484,8 @@ export function Admin() {
             )}
             {!current.posterUrl && (
               <p className="muted small">
-                Carica l'immagine evento: è quello che gli spettatori vedono prima di premere play.
+                Stai usando il <b>template automatico</b> (titolo + gradiente, scelto in base al link). Carica
+                un'immagine per personalizzarlo: è quello che gli spettatori vedono prima di premere play.
               </p>
             )}
             {!active && (
@@ -531,13 +528,7 @@ export function Admin() {
               {streams.map((s) => (
                 <tr key={s.id}>
                   <td>
-                    {s.iconUrl ? (
-                      <img className="thumb icon-thumb" src={s.iconUrl} alt="" />
-                    ) : s.posterUrl ? (
-                      <img className="thumb icon-thumb" src={s.posterUrl} alt="" />
-                    ) : (
-                      <span className="thumb icon-thumb placeholder" aria-hidden />
-                    )}
+                    <img className="thumb icon-thumb" src={iconSrc(s)} alt="" />
                   </td>
                   <td>
                     <span className="stream-title small">{s.title}</span>

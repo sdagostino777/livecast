@@ -540,6 +540,43 @@ describe("admin + public stream lifecycle", () => {
     expect(livePage.json().title).toBe("Congresso Regionale 2027");
   });
 
+  it("generates poster and icon artwork when no image was uploaded", async () => {
+    const cookie = await login();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie },
+      payload: { title: "Congresso Regionale 2027" },
+    });
+    const stream = created.json().stream;
+    expect(stream.fallbackPosterUrl).toBe(`/api/poster/${stream.slug}`);
+    expect(stream.posterUrl).toBeNull();
+
+    // A draft's public template must not exist (the title is still private).
+    const draftPoster = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
+    expect(draftPoster.statusCode).toBe(404);
+
+    // The admin variant works for any status.
+    const adminPoster = await app.inject({ method: "GET", url: `/api/admin/poster/${stream.id}`, headers: { cookie } });
+    expect(adminPoster.statusCode).toBe(200);
+    expect(adminPoster.headers["content-type"]).toContain("image/svg+xml");
+    expect(adminPoster.body).toContain("Congresso");
+
+    const anonPoster = await app.inject({ method: "GET", url: `/api/admin/poster/${stream.id}` });
+    expect(anonPoster.statusCode).toBe(401);
+
+    const adminIcon = await app.inject({ method: "GET", url: `/api/admin/icon/${stream.id}`, headers: { cookie } });
+    expect(adminIcon.statusCode).toBe(200);
+    expect(adminIcon.body).toContain("CR"); // initials
+
+    // Once public, the generated poster is served without a session.
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+    const publicPoster = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
+    expect(publicPoster.statusCode).toBe(200);
+    expect(publicPoster.body.startsWith("<svg")).toBe(true);
+  });
+
   it("rejects unknown and malformed stream slugs", async () => {
     expect((await app.inject({ method: "GET", url: "/api/live/aaaaaaaaaa" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/live/NOT-A-SLUG" })).statusCode).toBe(404);

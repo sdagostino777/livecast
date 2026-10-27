@@ -39,6 +39,7 @@ import net from "node:net";
 import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
+import { iconSvg, posterSvg } from "../poster.js";
 import { ingestServer, ingestServerWithCreds, mediaInputUrl } from "../ingest.js";
 
 const CreateStreamBody = z.object({
@@ -515,6 +516,30 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     destroyOtherSessions(app.db, user.id, session.sessionId);
     audit(app.db, { userId: user.id, username: user.username, action: "password_changed", ip: req.ip });
     return { ok: true };
+  });
+
+  // --- generated artwork (used when no image was uploaded) ------------------
+
+  app.get("/api/admin/poster/:id", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const params = safeParse(IdParams, req.params);
+    if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
+    const stream = getStreamById(app.db, params.data.id);
+    if (!stream) return reply.code(404).send({ error: "not_found" });
+    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "private, max-age=60");
+    return posterSvg({ title: stream.title, brand: app.settings.get().brandName, seed: stream.slug });
+  });
+
+  app.get("/api/admin/icon/:id", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const params = safeParse(IdParams, req.params);
+    if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
+    const stream = getStreamById(app.db, params.data.id);
+    if (!stream) return reply.code(404).send({ error: "not_found" });
+    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "private, max-age=60");
+    return iconSvg({ title: stream.title, seed: stream.slug });
   });
 
   // --- event images (poster before playback, square icon in lists) ----------
