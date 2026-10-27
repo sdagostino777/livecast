@@ -106,14 +106,18 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 ![The panel while live — green LEDs per publisher, capacity banner, settings](docs/screenshots/admin.png)
 
-- **Diretta** — create a broadcast with its title, kind and event images ("Crea"),
-  then start it from the list with "Vai in onda" when you are ready. Stop it and
-  copy the public link. programma esterno credentials are masked until revealed (audited).
-- **Dirette** — previous broadcasts with their kind (video / audio-only), poster
-  thumbnail and link. Deleted rows never own files on disk.
-- **⚙ Impostazioni** — the gear opens a page with **Aspetto** (light / dark /
-  system), **Evento** (poster and icon with previews), **Sicurezza** (password)
-  and, for admins, **Utenti**. The avatar top-right holds the role and *Esci*.
+- **Diretta** — the only broadcast this install has. The title, the kind (video
+  or audio-only) and the event images save themselves: there is no "Salva", the
+  preview follows as you type. **● ONLINE** starts it, **■ STOP** ends it, and
+  **Nuovo evento** opens the next one with a new link. While on air the panel
+  shows the time elapsed and how many player pages are connected right now.
+- **Link della diretta** — copyable from the first moment: whoever opens it sees
+  the event name and artwork before pressing play, and messaging apps show the
+  same preview thanks to the Open Graph tags the server renders for `/live/<slug>`.
+- **⚙ Impostazioni** — the gear opens a page with **Identità** (service name and
+  logo, yours), **Aspetto** (light / dark / system), **Evento** (poster, icon and
+  "show the event name over the image"), **Sicurezza** (password) and, for
+  admins, **Utenti**. The account button top-right holds the role and *Esci*.
 - **Utenti** (admin only) — create operators, reset their passwords, delete them.
   The admin account row shows "account protetto" and has no actions.
 - **Configurazione** — public URL, **CDN base URL, ingest host/port**: switching
@@ -123,6 +127,12 @@ a broadcast from the panel and press play on `/live/<slug>`.
 - **Sicurezza** — change your own password (revokes your other sessions).
 
 ## Make it yours
+
+The name and the logo are configuration, not code: **Identità** in the panel
+renames the service everywhere (panel, player, page title, link previews) and
+uploads your own square logo, which replaces the generated play symbol and
+becomes the browser tab icon. Nothing in the UI says "Livecast" until you leave
+it that way.
 
 - **Name** — Configurazione → *Nome dell'installazione*. It appears in the panel,
   the player and the page title; no rebuild needed.
