@@ -1417,3 +1417,36 @@ h2 {
   line-height: 1.45;
   white-space: pre-wrap;
 }
+
+.device-check {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.device-preview {
+  width: 220px;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  background: #04101d;
+  object-fit: cover;
+}
+
+.mic-meter {
+  height: 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.mic-meter span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2f9e44, #8ac926, #d9a600);
+  transition: width 90ms linear;
+}

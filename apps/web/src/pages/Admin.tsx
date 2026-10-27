@@ -66,6 +66,11 @@ export function Admin() {
   const pubPc = useRef<RTCPeerConnection | null>(null);
   const pubMedia = useRef<MediaStream | null>(null);
   const pubVideo = useRef<HTMLVideoElement | null>(null);
+  const [devicePreview, setDevicePreview] = useState<MediaStream | null>(null);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [micLevel, setMicLevel] = useState(0);
+  const testVideo = useRef<HTMLVideoElement | null>(null);
+  const audioCtx = useRef<AudioContext | null>(null);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -141,6 +146,10 @@ export function Admin() {
     if (pubVideo.current && pubMedia.current) pubVideo.current.srcObject = pubMedia.current;
   }, [pubKind]);
 
+  useEffect(() => {
+    if (testVideo.current && devicePreview) testVideo.current.srcObject = devicePreview;
+  }, [devicePreview]);
+
   const active = ov?.stream ?? null;
   const onAir = Boolean(active);
 
@@ -215,6 +224,41 @@ export function Admin() {
     });
   }
 
+  /** Local check of camera and microphone, before anything goes on air. */
+  async function testDevices() {
+    setDeviceError(null);
+    try {
+      const media = devicePreview ?? (await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true }));
+      setDevicePreview(media);
+      const ctx = new AudioContext();
+      audioCtx.current = ctx;
+      const source = ctx.createMediaStreamSource(media);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buffer = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteTimeDomainData(buffer);
+        let peak = 0;
+        for (const value of buffer) peak = Math.max(peak, Math.abs(value - 128));
+        setMicLevel(Math.min(100, Math.round((peak / 128) * 160)));
+        if (audioCtx.current) requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "permesso negato";
+      setDeviceError(`Camera o microfono non disponibili (${detail}).`);
+    }
+  }
+
+  function stopDeviceTest() {
+    audioCtx.current?.close().catch(() => {});
+    audioCtx.current = null;
+    devicePreview?.getTracks().forEach((track) => track.stop());
+    setDevicePreview(null);
+    setMicLevel(0);
+  }
+
   async function publishFromBrowser(kind: "camera" | "screen") {
     setPubError(null);
     setBusy(true);
@@ -227,7 +271,7 @@ export function Admin() {
       const media =
         kind === "screen"
           ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-          : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
+          : (devicePreview ?? (await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true })));
       pubMedia.current = media;
       if (pubVideo.current) pubVideo.current.srcObject = media;
 
@@ -243,24 +287,25 @@ export function Admin() {
       });
       if (!res.ok) throw new Error(`WHIP ${res.status}`);
       await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+      // The server often reports "peer connection established" before our
+      // listener is attached: state is polled, not only observed by event.
       await new Promise<void>((resolve, reject) => {
-        const timer = window.setTimeout(() => reject(new Error("timeout")), 10000);
-        pc.addEventListener("connectionstatechange", () => {
-          if (pc.connectionState === "connected") {
-            window.clearTimeout(timer);
-            resolve();
-          } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-            window.clearTimeout(timer);
-            reject(new Error(pc.connectionState));
-          }
-        });
+        const started = Date.now();
+        const check = () => {
+          if (pc.connectionState === "connected") return resolve();
+          if (pc.connectionState === "failed") return reject(new Error("failed"));
+          if (Date.now() - started > 12000) return reject(new Error("timeout"));
+          window.setTimeout(check, 250);
+        };
+        check();
       });
       setPubKind(kind);
       notify("Dispositivo collegato. Premi ● ONLINE.");
       await refresh();
-    } catch {
+    } catch (err) {
       stopPublishing();
-      setPubError("Impossibile collegare il dispositivo (camera/schermo).");
+      const detail = err instanceof Error ? err.message : "errore sconosciuto";
+      setPubError(`Impossibile collegare il dispositivo (${detail}). Controlla i permessi del browser per camera e microfono.`);
     } finally {
       setBusy(false);
     }
@@ -402,13 +447,40 @@ export function Admin() {
             <div className="sep" style={{ margin: "10px 0" }} />
 
             {pubKind === null ? (
-              <div className="row wrap">
+              <div className="stack" style={{ gap: 10 }}>
+                <div className="row wrap">
+                  <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => void testDevices()}>
+                    {devicePreview ? "Riprova dispositivi" : "Verifica camera e microfono"}
+                  </button>
+                  {devicePreview && (
+                    <button className="btn btn-ghost btn-small" disabled={busy} onClick={stopDeviceTest}>
+                      Chiudi prova
+                    </button>
+                  )}
+                </div>
+                {devicePreview && (
+                  <div className="device-check">
+                    <video ref={testVideo} autoPlay muted playsInline className="device-preview" />
+                    <div className="stack" style={{ gap: 6, flex: 1 }}>
+                      <span className="small muted">Microfono</span>
+                      <div className="mic-meter">
+                        <span style={{ width: `${micLevel}%` }} />
+                      </div>
+                      <span className="small muted">
+                        {micLevel > 3 ? "Il microfono sta ricevendo audio" : "Parla: la barra deve muoversi"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {deviceError && <p className="error-text small">{deviceError}</p>}
+                <div className="row wrap">
                 <button className="btn btn-ghost btn-small" disabled={busy || !current} onClick={() => void publishFromBrowser("camera")}>
                   Collega camera
                 </button>
                 <button className="btn btn-ghost btn-small" disabled={busy || !current} onClick={() => void publishFromBrowser("screen")}>
                   Collega schermo
                 </button>
+                </div>
               </div>
             ) : (
               <div className="stack" style={{ gap: 8 }}>

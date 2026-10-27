@@ -35,7 +35,10 @@ const LoginBody = z.object({
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/api/auth/login",
-    { config: { rateLimit: { max: 20, timeWindow: "15 minutes" } } },
+    // Brute force is already slowed down by argon2id and by the generic error;
+    // a hard lockout punishes the operator, not the attacker. The limit stays
+    // generous enough to be invisible in normal use.
+    { config: { rateLimit: { max: 300, timeWindow: "15 minutes" } } },
     async (req, reply) => {
       const parsed = LoginBody.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: "invalid_request" });
@@ -78,7 +81,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   // external service: if the codes are lost, the server CLI is the last resort.
   app.post(
     "/api/auth/recover",
-    { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } },
+    { config: { rateLimit: { max: 300, timeWindow: "15 minutes" } } },
     async (req, reply) => {
       const parsed = z
         .object({

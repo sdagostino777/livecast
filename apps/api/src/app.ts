@@ -84,7 +84,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   await app.register(cookie);
-  await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute", keyGenerator: (req) => req.ip });
+  await app.register(rateLimit, { global: true, max: 1200, timeWindow: "1 minute", keyGenerator: (req) => req.ip });
 
   app.addHook("onSend", async (_req, reply) => {
     reply.header("X-Content-Type-Options", "nosniff");
