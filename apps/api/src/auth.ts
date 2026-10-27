@@ -175,6 +175,46 @@ export function pruneExpiredSessions(db: Db): void {
   db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(nowIso());
 }
 
+export const RECOVERY_CODE_COUNT = 8;
+
+/** Recovery codes are shown once and stored only as SHA-256 hashes. */
+export function generateRecoveryCodes(db: Db, userId: string): string[] {
+  db.prepare("DELETE FROM recovery_codes WHERE user_id = ?").run(userId);
+  const insert = db.prepare("INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?)");
+  const codes: string[] = [];
+  const now = nowIso();
+  const tx = db.transaction(() => {
+    for (let i = 0; i < RECOVERY_CODE_COUNT; i++) {
+      // 10 base32 characters ≈ 50 bits: long enough to resist guessing even
+      // without a rate limit, short enough to copy by hand from paper.
+      const raw = randomBytes(8).toString("hex").toUpperCase().slice(0, 10);
+      codes.push(`${raw.slice(0, 5)}-${raw.slice(5)}`);
+      insert.run(userId, sha256(raw), now);
+    }
+  });
+  tx();
+  return codes;
+}
+
+/** Consumes a code: true once, false if unknown or already used. */
+export function consumeRecoveryCode(db: Db, userId: string, code: string): boolean {
+  const normalized = code.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  if (normalized.length !== 10) return false;
+  const row = db
+    .prepare("SELECT id FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND used_at IS NULL")
+    .get(userId, sha256(normalized)) as { id: number } | undefined;
+  if (!row) return false;
+  db.prepare("UPDATE recovery_codes SET used_at = ? WHERE id = ?").run(nowIso(), row.id);
+  return true;
+}
+
+export function countUnusedRecoveryCodes(db: Db, userId: string): number {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n FROM recovery_codes WHERE user_id = ? AND used_at IS NULL")
+    .get(userId) as { n: number };
+  return row.n;
+}
+
 export function setPassword(db: Db, userId: string, passwordHash: string): void {
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
 }

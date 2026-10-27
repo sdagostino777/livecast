@@ -176,3 +176,10 @@ export function posterSrc(stream: { posterUrl: string | null; adminPosterUrl: st
 export function iconSrc(stream: { iconUrl: string | null; adminIconUrl: string }): string {
   return stream.iconUrl ?? stream.adminIconUrl;
 }
+
+export async function recoverPassword(username: string, code: string, newPassword: string): Promise<void> {
+  await request("/api/auth/recover", {
+    method: "POST",
+    body: JSON.stringify({ username, code, newPassword }),
+  });
+}

@@ -65,6 +65,15 @@ export function openDb(file: string): Db {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_streams_one_active
       ON streams(status) WHERE status IN ('starting', 'live');
 
+    CREATE TABLE IF NOT EXISTS recovery_codes (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash  TEXT NOT NULL UNIQUE,             -- sha256 of the printed code
+      used_at    TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_recovery_user ON recovery_codes(user_id);
+
     CREATE TABLE IF NOT EXISTS audit_log (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id    TEXT,

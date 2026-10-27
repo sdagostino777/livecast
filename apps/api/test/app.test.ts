@@ -577,6 +577,61 @@ describe("admin + public stream lifecycle", () => {
     expect(renamedEnded.statusCode).toBe(200);
   });
 
+  it("issues recovery codes on password change and redeems them without a session", async () => {
+    const cookie = await login();
+    const changed = await app.inject({
+      method: "POST",
+      url: "/api/admin/password",
+      headers: { cookie },
+      payload: { currentPassword: PASSWORD, newPassword: "a much longer new password" },
+    });
+    expect(changed.statusCode).toBe(200);
+    const codes = changed.json().recoveryCodes as string[];
+    expect(codes).toHaveLength(8);
+    expect(codes[0]).toMatch(/^[0-9A-F]{5}-[0-9A-F]{5}$/);
+
+    const remaining = await app.inject({ method: "GET", url: "/api/admin/recovery-codes", headers: { cookie } });
+    expect(remaining.json().remaining).toBe(8);
+
+    // A wrong code changes nothing.
+    const wrong = await app.inject({
+      method: "POST",
+      url: "/api/auth/recover",
+      payload: { username: USERNAME, code: "AAAAA-AAAAA", newPassword: "another long password 1" },
+    });
+    expect(wrong.statusCode).toBe(401);
+
+    // The printed code resets the password and invalidates the session.
+    const recovered = await app.inject({
+      method: "POST",
+      url: "/api/auth/recover",
+      payload: {
+        username: USERNAME,
+        code: codes[0]!.toLowerCase().replace("-", " "), // forgiving input
+        newPassword: "recovered password 123456",
+      },
+    });
+    expect(recovered.statusCode).toBe(200);
+
+    const oldSession = await app.inject({ method: "GET", url: "/api/auth/me", headers: { cookie } });
+    expect(oldSession.statusCode).toBe(401);
+
+    const newPasswordWorks = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: USERNAME, password: "recovered password 123456" },
+    });
+    expect(newPasswordWorks.statusCode).toBe(200);
+
+    // A code is single use.
+    const reuse = await app.inject({
+      method: "POST",
+      url: "/api/auth/recover",
+      payload: { username: USERNAME, code: codes[0]!, newPassword: "yet another password 1" },
+    });
+    expect(reuse.statusCode).toBe(401);
+  });
+
   it("generates poster and icon artwork when no image was uploaded", async () => {
     const cookie = await login();
     const created = await app.inject({

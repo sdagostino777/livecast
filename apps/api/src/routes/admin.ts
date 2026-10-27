@@ -23,7 +23,10 @@ import { config, hlsDir, recordingsDir, uploadsDir } from "../config.js";
 import { audit } from "../db.js";
 import {
   MIN_PASSWORD_LENGTH,
+  consumeRecoveryCode,
+  countUnusedRecoveryCodes,
   createUser,
+  generateRecoveryCodes,
   setMustChangePassword,
   deleteUser,
   destroyAllSessions,
@@ -532,8 +535,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     setPassword(app.db, user.id, await hashPassword(parsed.data.newPassword));
     setMustChangePassword(app.db, user.id, false);
     destroyOtherSessions(app.db, user.id, session.sessionId);
+    // A new password regenerates the recovery codes: old printouts must stop
+    // working the moment the password they protected changes.
+    const recoveryCodes = generateRecoveryCodes(app.db, user.id);
     audit(app.db, { userId: user.id, username: user.username, action: "password_changed", ip: req.ip });
-    return { ok: true };
+    return { ok: true, recoveryCodes };
   });
 
   // --- generated artwork (used when no image was uploaded) ------------------
@@ -717,6 +723,31 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       ip: req.ip,
     });
     return { ok: true };
+  });
+
+  // --- recovery codes ------------------------------------------------------
+  // Printed once, stored as hashes, usable from the login page without a
+  // session. Regenerating requires the current password.
+
+  app.get("/api/admin/recovery-codes", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    return { remaining: countUnusedRecoveryCodes(app.db, session.user.id) };
+  });
+
+  app.post("/api/admin/recovery-codes", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const parsed = safeParse(z.object({ password: z.string().min(1).max(200) }), req.body);
+    if (!parsed.ok) return reply.code(400).send({ error: "invalid_request" });
+    const user = getUserByUsername(app.db, session.user.username);
+    if (!user) return reply.code(401).send({ error: "unauthorized" });
+    if (!(await verifyPassword(user.passwordHash, parsed.data.password))) {
+      return reply.code(403).send({ error: "invalid_credentials" });
+    }
+    const codes = generateRecoveryCodes(app.db, user.id);
+    audit(app.db, { userId: user.id, username: user.username, action: "recovery_codes_generated", ip: req.ip });
+    return { recoveryCodes: codes };
   });
 
   app.get("/api/admin/audit", async (req, reply) => {

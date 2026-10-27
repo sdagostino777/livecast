@@ -473,6 +473,32 @@ function SecurityPanel({ notify }: { notify: (m: string) => void }) {
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [regenPassword, setRegenPassword] = useState("");
+  const [newCodes, setNewCodes] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ remaining: number }>("/api/admin/recovery-codes")
+      .then((res) => setRemaining(res.remaining))
+      .catch(() => setRemaining(null));
+  }, [newCodes]);
+
+  async function regenerate(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.post<{ recoveryCodes: string[] }>("/api/admin/recovery-codes", { password: regenPassword });
+      setNewCodes(res.recoveryCodes);
+      setRegenPassword("");
+      notify("Nuovi codici generati: salvali ora.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function changePassword(event: FormEvent) {
     event.preventDefault();
@@ -496,6 +522,32 @@ function SecurityPanel({ notify }: { notify: (m: string) => void }) {
         <h2>Sicurezza</h2>
       </div>
       {error && <p className="error-text small">{error}</p>}
+      {newCodes && (
+        <div className="banner banner-ok">
+          <p className="small" style={{ margin: 0 }}>
+            Nuovi codici di recupero (mostrati una sola volta): <b>{newCodes.join(" · ")}</b>
+          </p>
+        </div>
+      )}
+      <p className="muted small">
+        Codici di recupero disponibili: <b>{remaining ?? "…"}</b>. Servono se dimentichi la password: si usano dalla
+        pagina di login («Password dimenticata?»).
+      </p>
+      <form className="row wrap" onSubmit={regenerate}>
+        <input
+          className="input"
+          type="password"
+          placeholder="Password attuale per rigenerare i codici"
+          autoComplete="current-password"
+          value={regenPassword}
+          onChange={(e) => setRegenPassword(e.target.value)}
+        />
+        <button className="btn btn-ghost btn-small" type="submit" disabled={busy || !regenPassword}>
+          Rigenera codici
+        </button>
+      </form>
+      <hr className="sep" />
+
       <form className="stack" onSubmit={changePassword}>
         <p className="small muted">Cambia la tua password (le altre sessioni vengono chiuse):</p>
         <div className="row wrap">

@@ -10,7 +10,15 @@
  */
 import { randomBytes } from "node:crypto";
 import { dbFile } from "./config.js";
-import { destroyAllSessions, createUser, getUserByUsername, hashPassword, setPassword, setMustChangePassword } from "./auth.js";
+import {
+  destroyAllSessions,
+  createUser,
+  generateRecoveryCodes,
+  getUserByUsername,
+  hashPassword,
+  setPassword,
+  setMustChangePassword,
+} from "./auth.js";
 import { openDb } from "./db.js";
 import { MIN_PASSWORD_LENGTH } from "./auth.js";
 
@@ -91,7 +99,11 @@ switch (command) {
     setPassword(db, user.id, await hashPassword(pw));
     setMustChangePassword(db, user.id, forced);
     destroyAllSessions(db, user.id);
+    const codes = generateRecoveryCodes(db, user.id);
     console.log(`ADMIN_PASSWORD=${pw}`);
+    console.log("RECOVERY_CODES=" + codes.join(","));
+    console.log("codici di recupero (valgono una volta ciascuno, conservali):");
+    for (const code of codes) console.log(`  ${code}`);
     console.log(
       forced
         ? `password reset to the default for "${user.username}" — the panel will force a change at next login`

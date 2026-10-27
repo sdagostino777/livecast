@@ -1202,6 +1202,23 @@ h2 {
   opacity: 0.45;
 }
 
+.recovery-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0;
+  padding-left: 20px;
+  font-family: var(--mono);
+  font-size: 15px;
+}
+
+.recovery-list code {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
 .swatch {
   width: 54px;
   height: 34px;

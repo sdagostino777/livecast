@@ -15,6 +15,7 @@ export function ForcePasswordChange({ username, isAdmin }: { username: string; i
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -29,7 +30,14 @@ export function ForcePasswordChange({ username, isAdmin }: { username: string; i
     }
     setBusy(true);
     try {
-      await api.post("/api/admin/password", { currentPassword, newPassword });
+      const res = await api.post<{ ok: boolean; recoveryCodes?: string[] }>("/api/admin/password", {
+        currentPassword,
+        newPassword,
+      });
+      if (res.recoveryCodes?.length) {
+        setRecoveryCodes(res.recoveryCodes);
+        return;
+      }
       window.location.reload();
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) setError("Password attuale non corretta.");
@@ -38,6 +46,38 @@ export function ForcePasswordChange({ username, isAdmin }: { username: string; i
     } finally {
       setBusy(false);
     }
+  }
+
+  if (recoveryCodes) {
+    return (
+      <div className="auth-page">
+        <div className="card auth-card">
+          <BrandMark name={brand} size={42} />
+          <h2 style={{ margin: 0, textAlign: "center" }}>Codici di recupero</h2>
+          <p className="muted small" style={{ margin: 0 }}>
+            Salvali ora: vengono mostrati <b>una sola volta</b>. Se dimentichi la password, uno di questi codici ti
+            permette di impostarne una nuova dal login («Password dimenticata?»).
+          </p>
+          <ol className="recovery-list">
+            {recoveryCodes.map((code) => (
+              <li key={code}>
+                <code>{code}</code>
+              </li>
+            ))}
+          </ol>
+          <button
+            className="btn btn-ghost btn-small"
+            type="button"
+            onClick={() => void navigator.clipboard?.writeText(recoveryCodes.join("\n"))}
+          >
+            Copia tutti
+          </button>
+          <button className="btn btn-primary" type="button" onClick={() => window.location.reload()}>
+            Li ho salvati, continua
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
