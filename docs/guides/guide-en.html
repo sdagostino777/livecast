@@ -45,7 +45,7 @@
     </style>
   </head>
   <body>
-    <div class="page cover">
+<div class="page cover">
       <h1>Livecast</h1>
       <p class="tagline">How to set up a broadcast, simply.</p>
       <div class="card">
@@ -70,11 +70,10 @@
         Quick guide · version 1.0 · https://github.com/sdagostino777/livecast
       </p>
       <div class="footer" style="color: #cfe0f2; border-color: rgba(255,255,255,.25)">
-        <span>Livecast — quick guide</span><span>1 / 5</span>
+        <span>Livecast — quick guide</span><span>1 / 8</span>
       </div>
     </div>
-
-    <div class="page">
+<div class="page">
       <h2>1. What you need</h2>
       <ul class="steps">
         <li><b>programma di trasmissione esterno</b> on a computer (Windows, macOS, Linux) — the program that sends the video. Free, <span class="mono">obsproject.com</span>.</li>
@@ -109,10 +108,9 @@
           characters and you are in.
         </p>
       </div>
-      <div class="footer"><span>Livecast — quick guide</span><span>2 / 7</span></div>
+      <div class="footer"><span>Livecast — quick guide</span><span>2 / 8</span></div>
     </div>
-
-    <div class="page">
+<div class="page">
       <h2>2. First login and creating a broadcast</h2>
       <p>
         Open the panel link and sign in. Top right you will find the gear (settings) and your avatar with <b>Esci</b>
@@ -130,10 +128,9 @@
         No image at hand? The system <b>generates one</b> from the event title on a gradient background (deep
         navy, petrol, indigo…). Replace it whenever you like with “Carica immagine”.
       </p>
-      <div class="footer"><span>Livecast — quick guide</span><span>3 / 7</span></div>
+      <div class="footer"><span>Livecast — quick guide</span><span>3 / 8</span></div>
     </div>
-
-    <div class="page">
+<div class="page">
       <h2>3. Settings (the gear)</h2>
       <p>
         The gear (top right) opens the settings page: <b>Appearance</b> (light, dark or system theme),
@@ -142,10 +139,9 @@
       </p>
       <img class="img" src="../screenshots/admin-settings.png" style="max-height:100mm" alt="Settings page" />
       <p class="caption">2b. Settings: theme, event image, security, users.</p>
-      <div class="footer"><span>Livecast — quick guide</span><span>4 / 7</span></div>
+      <div class="footer"><span>Livecast — quick guide</span><span>4 / 8</span></div>
     </div>
-
-    <div class="page">
+<div class="page">
       <h2>4. Going live</h2>
       <div class="box">
         <p class="small">
@@ -173,11 +169,10 @@
       </p>
       <img class="img" src="../screenshots/player-poster.png" style="max-height:95mm" alt="Player before play, with the event poster" />
       <p class="caption">4. Before play: the event poster and the play button.</p>
-      <div class="footer"><span>Livecast — quick guide</span><span>5 / 7</span></div>
+      <div class="footer"><span>Livecast — quick guide</span><span>5 / 8</span></div>
     </div>
-
-    <div class="page">
-      <h2>4. What the viewer sees</h2>
+<div class="page">
+      <h2>5. What the viewer sees</h2>
       <p>
         During the broadcast: play and pause, the <b>LIVE</b> badge and the title. Nothing else — every extra control
         is one more thing to get wrong on a phone in a crowd.
@@ -186,11 +181,42 @@
       <p class="caption">5. The player: play and pause only, as it should be.</p>
       <img class="img" src="../screenshots/audio.png" alt="Audio-only player" style="max-height: 78mm" />
       <p class="caption">6. An «Audio only» broadcast: same simplicity, with the audio card.</p>
-      <div class="footer"><span>Livecast — quick guide</span><span>6 / 7</span></div>
+      <div class="footer"><span>Livecast — quick guide</span><span>6 / 8</span></div>
     </div>
-
-    <div class="page">
-      <h2>5. Viewers, CDN and the unexpected</h2>
+<div class="page">
+      <h2>6. Forgot your password? Recovery codes</h2>
+      <p>
+        When you set (or reset) the password, the system generates <b>8 recovery codes</b> and shows them
+        <b>once</b>. Copy or print them: they are the only way back in on your own if you forget the password.
+      </p>
+      <div class="box">
+        <p class="mono" style="margin: 4px 0">38247-FA538 · 890E4-A0BB6 · 28537-304BB · AA636-54122</p>
+        <p class="mono" style="margin: 4px 0">D13F4-A3352 · F8FBC-E02C8 · C8454-86EE7 · EB5DC-70BEF</p>
+        <p class="small" style="margin: 4px 0">This is what they look like. Yours will differ: save yours.</p>
+      </div>
+      <ul class="steps">
+        <li>On the sign-in page press <b>Password dimenticata?</b>.</li>
+        <li>Enter the user, <b>one code</b> and the new password (at least 12 characters).</li>
+        <li>The password changes and <b>every session is closed</b>. Each code works <b>once</b>.</li>
+        <li>In <b>Settings → Sicurezza</b> you can see how many codes remain and <b>regenerate</b> them (current
+          password required: the old ones stop working).</li>
+      </ul>
+      <div class="box warn">
+        <p class="small">
+          <b>Lost the codes too?</b> Whoever administers the server resets the password from the command line. The
+          command also prints 8 new codes:
+        </p>
+        <p class="mono" style="margin: 6px 0">cd /srv/livecast/app</p>
+        <p class="mono" style="margin: 6px 0">node --env-file=.env apps/api/dist/cli.js reset-password --username admin --password admin</p>
+      </div>
+      <p class="small">
+        In the database the codes are stored only as a <b>cryptographic hash</b>: nobody — not even the server
+        administrator — can read the plaintext code back.
+      </p>
+      <div class="footer"><span>Livecast — quick guide</span><span>7 / 8</span></div>
+    </div>
+<div class="page">
+      <h2>7. Viewers, CDN and the unexpected</h2>
       <div class="box">
         <p class="small">
           <b>How many viewers does the VPS handle?</b> Up to <b>~500 simultaneous</b> the VPS alone is enough. Beyond
@@ -214,7 +240,7 @@
         README · <b>docs/RUNBOOK.md</b> (operations, CDN, recovery) · <b>docs/CDN.md</b> (Bunny CDN step by step) ·
         <b>docs/guides/guide-it.pdf</b> (this guide in Italian).
       </p>
-      <div class="footer"><span>Livecast — quick guide</span><span>7 / 7</span></div>
+      <div class="footer"><span>Livecast — quick guide</span><span>8 / 8</span></div>
     </div>
   </body>
 </html>

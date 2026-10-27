@@ -134,6 +134,34 @@ a broadcast from the panel and press play on `/live/<slug>`.
 - **Repo** — rename it freely; the only files that mention "livecast" are the
   package names, the default `APP_NAME`, and the fallback brand string.
 
+## Password recovery
+
+There is no email dependency and no external identity provider: the install
+issues **eight one-time recovery codes** whenever a password is set or reset
+(including the first forced change). They are displayed exactly once and stored
+only as SHA-256 hashes, so nobody — not even the server administrator — can read
+a code back from the database.
+
+- **Lost the password?** Login page → *Password dimenticata?* → username, one
+  code, new password. Every session is closed; the code is spent.
+- **Remaining codes / new set:** Settings → Sicurezza shows how many are left
+  and regenerates them (current password required; the old set stops working).
+- **Lost the codes too?** On the server, as the last resort:
+
+  ```bash
+  cd /srv/livecast/app
+  node --env-file=.env apps/api/dist/cli.js reset-password --username admin --password admin
+  ```
+
+  It resets to `admin / admin` (forced change on next login) and prints eight
+  fresh codes.
+
+| Layer | What protects it |
+| --- | --- |
+| Recovery codes | 8 codes × ~50 bits, single use, hashed at rest, regeneration invalidates the previous set |
+| Server shell | The true root of trust: whoever holds the VPS can always reset the account, and that is deliberate — a recovery path that does not need the server would be a weaker one |
+| Email | Not used. An inbox is an additional attack surface, not a stronger factor |
+
 ## Configuration
 
 | Variable | Default | Purpose |
