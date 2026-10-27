@@ -139,13 +139,24 @@ describe("auth", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("rate-limits login attempts", async () => {
-    for (let i = 0; i < 10; i++) {
+  it("does not lock the operator out after a burst of mistakes", async () => {
+    // The limit exists to slow an attacker down, not to lock the panel: after a
+    // dozen wrong passwords the correct one must still work.
+    for (let i = 0; i < 12; i++) {
       const res = await app.inject({
         method: "POST",
         url: "/api/auth/login",
         payload: { username: USERNAME, password: "wrong password here" },
       });
+      expect(res.statusCode).toBe(401);
+    }
+    const correct = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: USERNAME, password: PASSWORD },
+    });
+    expect(correct.statusCode).toBe(200);
+  });
       expect(res.statusCode).toBe(401);
     }
     const blocked = await app.inject({
