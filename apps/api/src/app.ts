@@ -158,14 +158,17 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       // index.html for real asset paths only by accident.
       wildcard: false,
       decorateReply: true,
+      // cacheControl is disabled so this plugin cannot overwrite the headers
+      // below; files served through its own routes get them here, SPA routes
+      // get them explicitly in the not-found handler.
+      cacheControl: false,
       setHeaders(res, filePath) {
-        // index.html names the hashed bundles: caching it means a deploy can be
-        // invisible to a browser that already has the old page. Assets are
-        // content-addressed and safe to cache forever.
         if (filePath.endsWith("index.html")) {
           res.setHeader("Cache-Control", "no-store");
-        } else {
+        } else if (filePath.includes("/assets/")) {
           res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=3600");
         }
       },
     });
@@ -175,14 +178,22 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       }
       if (req.url.startsWith("/api/")) return reply.code(404).send({ error: "not_found" });
       const pathname = (req.url.split("?")[0] ?? "/").replace(/^\/+/, "");
-      if (pathname === "") return reply.sendFile("index.html");
+      // index.html names the hashed bundles: caching it means a deploy can be
+      // invisible to a browser that already has the old page. Assets are
+      // content-addressed and safe to cache forever.
+      if (pathname === "" || pathname === "index.html") {
+        reply.header("Cache-Control", "no-store");
+        return reply.sendFile("index.html");
+      }
       const candidate = path.join(webRoot, pathname);
       // `reply.sendFile` resolves on missing files by sending a 404, not by
       // rejecting, so existence is checked here: that is the difference between
       // a missing asset and an SPA route.
       if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        reply.header("Cache-Control", pathname.startsWith("assets/") ? "public, max-age=31536000, immutable" : "public, max-age=3600");
         return reply.sendFile(pathname);
       }
+      reply.header("Cache-Control", "no-store");
       return reply.sendFile("index.html");
     });
   } else {
