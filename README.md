@@ -223,11 +223,11 @@ limit of a single-box install, and it needs a plan, not a promise:
    other half of the equation: if the *encoder* fails, the show continues; if
    the *server* fails, no software on it can. The two failures are independent.
 
-A failover looks like this: the primary encoder disappears, the backup one is
-already connected, and the panel simply switches "In uso" — the broadcast does
-not stop, it restarts from the other publisher within about three seconds.
+A failover works the same way it always did — the primary publisher disappears,
+the backup one is already connected, and the encoder restarts from it in about
+three seconds — but the panel no longer shows a separate "backup in use" screen:
+the single Diretta card is the whole story.
 
-![The panel during a failover: backup input in use](docs/screenshots/admin-failover.png)
 
 ## Guides
 

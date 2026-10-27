@@ -24,7 +24,8 @@ export function Login() {
       navigate("/admin", true);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setError("Credenziali non valide.");
-      else if (err instanceof ApiError && err.status === 429) setError("Troppi tentativi. Riprova tra qualche minuto.");
+      else if (err instanceof ApiError && err.status === 429)
+        setError("Troppi tentativi di accesso da questa rete. Riprova tra qualche minuto (max 20 tentativi in 15 minuti).");
       else setError("Impossibile contattare il server.");
     } finally {
       setBusy(false);
