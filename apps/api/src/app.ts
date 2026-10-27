@@ -113,9 +113,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       // content is public, so a wildcard origin is the correct answer here; it
       // is set at the origin too so any CDN that passes headers through keeps
       // working even if its own CORS switch is off.
-      setHeaders(res) {
+      setHeaders(res, filePath) {
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        // Mirror the production nginx cache policy so a request served by the
+        // app (development, or the HTTP bootstrap before TLS) behaves the same.
+        if (filePath.endsWith(".ts")) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (filePath.endsWith(".m3u8")) {
+          res.setHeader("Cache-Control", "no-store");
+        }
       },
     });
   }

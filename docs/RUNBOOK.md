@@ -82,6 +82,35 @@ then create a stream from the panel (or `POST /api/admin/streams` +
 `POST /api/admin/streams/<id>/start`) and watch `/hls/<slug>/master.m3u8`
 appear in `DATA_DIR/hls/<slug>/`.
 
+## Pre-flight TLS check (before the certificate exists)
+
+The production TLS site can be validated on the VPS with a self-signed cert,
+without touching the live nginx. This is how the nested variant paths were
+caught before activation day:
+
+```bash
+T=/tmp/nginx-live-test
+rm -rf "$T" && mkdir -p "$T/conf" "$T/logs" "$T/ssl"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=live.ndx-llc.com" \
+  -keyout "$T/ssl/privkey.pem" -out "$T/ssl/fullchain.pem"
+python3 - <<'PY'
+src = open('/srv/ndx-live/app/infra/nginx/live.conf').read()
+site = src[src.index('server {\n    listen 443'):]
+site = site.replace('listen 443 ssl;', 'listen 8443 ssl;') \
+           .replace('/etc/letsencrypt/live/__DOMAIN__/fullchain.pem', '/tmp/nginx-live-test/ssl/fullchain.pem') \
+           .replace('/etc/letsencrypt/live/__DOMAIN__/privkey.pem', '/tmp/nginx-live-test/ssl/privkey.pem')
+open('/tmp/nginx-live-test/conf/site.conf', 'w').write(site)
+PY
+printf 'worker_processes 1;\npid %s/nginx.pid;\nhttp { include mime.types; include %s/conf/site.conf; }\n' "$T" "$T" > "$T/nginx.conf"
+nginx -p "$T" -c "$T/nginx.conf" -t && nginx -p "$T" -c "$T/nginx.conf"
+curl -sk -o /dev/null -w 'health=%{http_code}\n' https://127.0.0.1:8443/api/health
+# with a live broadcast: check headers on a segment
+curl -skI https://127.0.0.1:8443/hls/<slug>/720/seg_000000.ts | grep -i cache-control
+```
+
+Expect `Cache-Control: public, max-age=31536000, immutable` on segments and
+`no-store` on every `.m3u8`, both through the CDN host and through the origin.
+
 ## Troubleshooting
 
 | Symptom | Check |
