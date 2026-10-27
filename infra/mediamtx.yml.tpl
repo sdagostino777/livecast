@@ -58,7 +58,7 @@ rtsp: no
 hls: no
 webrtc: yes
 webrtcAddress: 127.0.0.1:8889
-webrtcAllowOrigin: ["*"]
+webrtcAllowOrigins: ["*"]
 webrtcAdditionalHosts: ["__DOMAIN__"]
 webrtcLocalUDPAddress: :8189
 srt: no
