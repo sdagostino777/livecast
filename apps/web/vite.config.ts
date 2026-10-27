@@ -15,5 +15,9 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true,
+    // hls.js is a single ~600 kB chunk by design: it is lazy-loaded, so the
+    // number is a size note, not a regression. Raise the limit instead of
+    // splitting a library that only loads when the viewer presses play.
+    chunkSizeWarningLimit: 700,
   },
 });
