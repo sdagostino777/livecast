@@ -80,7 +80,7 @@ source "${CREDENTIALS_FILE}"
 
 log "MediaMTX ${MEDIAMTX_VERSION}"
 if [ -x "${APP_DIR}/bin/mediamtx" ]; then
-  ok "mediamtx already installed ($(${APP_DIR}/bin/mediamtx --version 2>/dev/null || echo installed))"
+  ok "mediamtx already installed ($("${APP_DIR}"/bin/mediamtx --version 2>/dev/null || echo installed))"
 else
   TMP="$(mktemp -d)"
   BASE="https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}"
