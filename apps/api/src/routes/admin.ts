@@ -362,6 +362,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (stream.status === "starting" || stream.status === "live") {
       return reply.code(409).send({ error: "stream_active" });
     }
+    // The event images belong to the stream: removing the row must not leave
+    // files behind in DATA_DIR/uploads.
+    for (const kind of ["poster", "icon"] as const) {
+      for (const ext of ["jpg", "png", "webp"]) {
+        try {
+          fs.unlinkSync(path.join(uploadsDir(), `${stream.slug}.${kind}.${ext}`));
+        } catch {
+          /* not present */
+        }
+      }
+    }
     deleteStreamRow(app.db, stream.id);
     audit(app.db, {
       userId: session.user.id,
