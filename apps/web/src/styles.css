@@ -1128,6 +1128,108 @@ h2 {
 }
 
 /* the on-air area: live preview with ONLINE / STOP beside it */
+.spinner-xs {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.blink-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e03131;
+  box-shadow: 0 0 0 2px rgba(224, 49, 49, 0.25);
+  animation: blink 1s steps(2, start) infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.blink-dot.hidden {
+  animation: none;
+  opacity: 0.25;
+  background: #9aa9bb;
+  box-shadow: none;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.regia-preview-wrap {
+  position: relative;
+  width: 360px;
+  flex: none;
+}
+
+@media (max-width: 720px) {
+  .regia-preview-wrap {
+    width: 100%;
+  }
+}
+
+.regia-preview-wrap .regia-preview {
+  width: 100%;
+}
+
+.live-corner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  background: rgba(3, 12, 24, 0.72);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  padding: 4px 9px;
+  border-radius: 999px;
+}
+
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--brand-soft);
+  border: 1.5px solid #bcd6ef;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+[data-theme="dark"] .share-row {
+  background: #16273a;
+  border-color: #29455f;
+}
+
+.share-row .share-url {
+  flex: 1;
+  min-width: 220px;
+  background: #fff;
+  font-size: 14.5px;
+  padding: 10px 12px;
+}
+
+[data-theme="dark"] .share-row .share-url {
+  background: #0f1b27;
+}
+
+.share-row .btn-primary {
+  padding: 12px 22px;
+  font-size: 16px;
+}
+
 .regia {
   display: flex;
   gap: 18px;

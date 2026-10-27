@@ -312,8 +312,25 @@ export function Admin() {
       <section className="card">
         <div className="card-head">
           <h2>Diretta</h2>
-          <span className={`pill ${active ? active.status : "off"}`}>{statusLabel(ov)}</span>
+          <span className={`pill ${active ? active.status : "off"}`}>
+            {active?.status === "starting" && <span className="spinner-xs" aria-hidden />}
+            {active?.status === "live" && <span className="blink-dot" aria-hidden />}
+            {statusLabel(ov)}
+          </span>
         </div>
+
+        {current && current.status !== "draft" && (
+          <div className="share-row">
+            <span className="small muted">Link della diretta</span>
+            <code className="code share-url">{current.pageUrl}</code>
+            <button
+              className="btn btn-primary"
+              onClick={() => void copyToClipboard(current.pageUrl).then(() => notify("Link copiato."))}
+            >
+              Copia link
+            </button>
+          </div>
+        )}
 
         <BroadcastConfig
           current={current}
@@ -324,41 +341,35 @@ export function Admin() {
           onSave={saveConfig}
         />
 
-        {current && (
-          <p className="row wrap" style={{ marginTop: 12 }}>
-            {current.status !== "draft" && (
-              <>
-                <button
-                  className="btn btn-ghost btn-small"
-                  onClick={() => void copyToClipboard(current.pageUrl).then(() => notify("Link copiato."))}
-                >
-                  Copia link della diretta
-                </button>
-                <span className="muted small mono ellipsis">{current.pageUrl}</span>
-              </>
-            )}
-          </p>
-        )}
-
         <hr className="sep" />
 
         <div className="regia">
           {pubKind ? (
-            <video ref={pubVideo} autoPlay muted playsInline className="regia-preview" />
+            <div className="regia-preview-wrap">
+              <video ref={pubVideo} autoPlay muted playsInline className="regia-preview" />
+              {onAir && (
+                <span className="live-corner" aria-label="in onda">
+                  <span className="blink-dot" aria-hidden /> LIVE
+                </span>
+              )}
+            </div>
           ) : (
             <div className="regia-preview empty">
               <span className="small">Anteprima non attiva</span>
             </div>
           )}
           <div className="regia-actions">
-            <button
-              className="btn btn-online"
-              disabled={busy || onAir || !(pubKind !== null || ov?.ingest.ready) || !current}
-              onClick={() => void startStream()}
-              title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
-            >
-              ● ONLINE
-            </button>
+            <div className="row">
+              <button
+                className="btn btn-online"
+                disabled={busy || onAir || !(pubKind !== null || ov?.ingest.ready) || !current}
+                onClick={() => void startStream()}
+                title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
+              >
+                {busy && !onAir ? <span className="spinner-xs" aria-hidden /> : "●"} ONLINE
+              </button>
+              <span className={`blink-dot${onAir ? "" : " hidden"}`} aria-hidden />
+            </div>
             <button className="btn btn-stop" disabled={busy || !onAir} onClick={() => void stopStream()} title="Ferma la diretta">
               ■ STOP
             </button>
