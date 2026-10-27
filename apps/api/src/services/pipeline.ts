@@ -231,6 +231,8 @@ export interface PipelineApi {
   attempts(): number;
   /** Which publisher the encoder is reading: the primary, or the failover path. */
   currentInput(): "primary" | "backup" | null;
+  /** Elementary streams the source actually carries (ffprobe). */
+  caps(): { video: boolean; audio: boolean } | null;
   start(opts: PipelineStartOptions, callbacks: PipelineCallbacks): void;
   stop(): void;
 }
@@ -562,6 +564,10 @@ export class HlsPipeline implements PipelineApi {
 
   currentInput(): "primary" | "backup" | null {
     return this.meta?.currentInput ?? null;
+  }
+
+  caps(): { video: boolean; audio: boolean } | null {
+    return this.meta?.caps ?? null;
   }
 
   private finish(reason: "stopped" | "ingest_timeout" | "fatal"): void {

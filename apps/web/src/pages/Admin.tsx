@@ -60,6 +60,7 @@ export function Admin() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [posterTarget, setPosterTarget] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const posterInput = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<number | null>(null);
   const [pubKind, setPubKind] = useState<null | "camera" | "screen">(null);
@@ -161,14 +162,18 @@ export function Admin() {
     title: string,
     kind: "video" | "audio",
     record: boolean,
-    files: { poster?: File; icon?: File },
+    files: { poster?: File; icon?: File; palette?: string | null },
   ) {
     await act(async () => {
       const created = await api.post<{ stream: StreamView }>("/api/admin/streams", { title, kind, record });
+      if (files.palette) {
+        await api.patch(`/api/admin/streams/${created.stream.id}`, { posterPalette: files.palette });
+      }
       if (files.poster) await uploadStreamImage(created.stream.id, "poster", files.poster);
       if (files.icon) await uploadStreamImage(created.stream.id, "icon", files.icon);
-      notify("Diretta creata. Premi «Vai in onda» nella lista quando sei pronto.");
+      notify("Diretta creata. Collega camera o schermo, poi premi ● ONLINE.");
     });
+    setCreating(false);
   }
 
   async function startStream(id: string) {
@@ -408,6 +413,9 @@ export function Admin() {
                 </div>
               </div>
               <div className="row wrap">
+                <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => setCreating((v) => !v)}>
+                  {creating ? "Chiudi" : "＋ Nuova diretta"}
+                </button>
                 <button
                   className="btn btn-ghost btn-small"
                   disabled={busy || Boolean(active)}
@@ -450,9 +458,9 @@ export function Admin() {
               <div className="regia-actions">
                 <button
                   className="btn btn-online"
-                  disabled={busy || Boolean(active)}
+                  disabled={busy || Boolean(active) || !(pubKind !== null || ov?.ingest.ready)}
                   onClick={() => void startStream(current.id)}
-                  title="Manda in onda"
+                  title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
                 >
                   ● ONLINE
                 </button>
@@ -508,8 +516,11 @@ export function Admin() {
             {active && <ObsPanel ov={ov} />}
           </div>
         ) : (
-          <p className="muted small">Nessuna diretta: creane una qui sotto con «Nuova diretta».</p>
+          <p className="muted small">Nessuna diretta. Prepara la prossima qui sotto.</p>
         )}
+
+        {(!current || creating) && <hr className="sep" />}
+        {(!current || creating) && <NewStreamForm disabled={busy} onCreate={createDraft} />}
       </section>
 
       <section className="card">
@@ -594,6 +605,14 @@ export function Admin() {
   );
 }
 
+const FORM_PALETTES: Array<{ value: string; label: string; css: string }> = [
+  { value: "blue", label: "Blu", css: "linear-gradient(135deg,#0f3559,#2a6cb6)" },
+  { value: "teal", label: "Petrolio", css: "linear-gradient(135deg,#0b3b4a,#1d7a8c)" },
+  { value: "indigo", label: "Indaco", css: "linear-gradient(135deg,#1e1a4d,#4f46a5)" },
+  { value: "slate", label: "Ardesia", css: "linear-gradient(135deg,#12212e,#3f6076)" },
+  { value: "plum", label: "Prugna", css: "linear-gradient(135deg,#3a1f3d,#8d4a63)" },
+];
+
 function NewStreamForm({
   disabled,
   onCreate,
@@ -603,12 +622,13 @@ function NewStreamForm({
     title: string,
     kind: "video" | "audio",
     record: boolean,
-    files: { poster?: File; icon?: File },
+    files: { poster?: File; icon?: File; palette?: string | null },
   ) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"video" | "audio">("video");
   const [record, setRecord] = useState(false);
+  const [formPalette, setFormPalette] = useState<string | null>(null);
   const [poster, setPoster] = useState<File | null>(null);
   const [icon, setIcon] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string | null>(null);
@@ -633,6 +653,7 @@ function NewStreamForm({
     await onCreate(title.trim(), kind, record, {
       ...(poster ? { poster } : {}),
       ...(icon ? { icon } : {}),
+      palette: formPalette,
     });
     setTitle("");
     setRecord(false);
@@ -668,6 +689,31 @@ function NewStreamForm({
       </div>
 
       <div className="row wrap" style={{ alignItems: "flex-end" }}>
+        <div className="stack" style={{ gap: 8, flex: 1, minWidth: 220 }}>
+          <span className="small muted">Sfondo del titolo (se non carichi un&#39;immagine)</span>
+          <div className="row wrap">
+            {FORM_PALETTES.map((palette) => (
+              <button
+                key={palette.value}
+                type="button"
+                title={palette.label}
+                aria-label={palette.label}
+                className={`swatch${formPalette === palette.value ? " active" : ""}`}
+                style={{ background: palette.css }}
+                onClick={() => setFormPalette(palette.value)}
+              />
+            ))}
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              onClick={() => setFormPalette(null)}
+              title="Sceglie la palette dal link della diretta"
+            >
+              Automatico
+            </button>
+          </div>
+        </div>
+
         <div className="stack" style={{ gap: 8, flex: 1, minWidth: 220 }}>
           <span className="small muted">Immagine evento (16:9) — visibile prima del play</span>
           {posterPreview ? (

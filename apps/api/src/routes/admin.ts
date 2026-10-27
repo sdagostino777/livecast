@@ -174,6 +174,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         attempts: app.pipeline.attempts(),
         startedAt: startedAtMs === null ? null : new Date(startedAtMs).toISOString(),
         lastError: app.pipeline.lastExit?.stderrTail ? app.pipeline.lastExit.stderrTail.slice(-600) : null,
+        caps: app.pipeline.caps(),
       },
       ingest: {
         // null when MediaMTX's API cannot be reached: the page shows "unknown"

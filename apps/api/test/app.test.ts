@@ -47,6 +47,7 @@ function makeFakePipeline(): FakePipeline {
       fake.callbacks?.onLive();
     },
     currentInput: () => (state === "idle" ? null : "primary"),
+    caps: () => ({ video: true, audio: true }),
   };
   return fake;
 }
