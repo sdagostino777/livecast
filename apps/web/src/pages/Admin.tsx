@@ -44,15 +44,6 @@ function statusLabel(ov: Overview | null): string {
   return "Pronta";
 }
 
-function initials(name: string): string {
-  return name
-    .split(/[\s._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]!.toUpperCase())
-    .join("");
-}
-
 const PALETTES: Array<{ value: string; label: string; css: string }> = [
   { value: "blue", label: "Blu", css: "linear-gradient(135deg,#0f3559,#2a6cb6)" },
   { value: "teal", label: "Petrolio", css: "linear-gradient(135deg,#0b3b4a,#1d7a8c)" },
@@ -433,7 +424,10 @@ export function Admin() {
           </button>
           <div className="avatar-menu" onClick={(event) => event.stopPropagation()}>
             <button className="avatar" onClick={() => setMenuOpen((open) => !open)} aria-label="Menu utente">
-              {initials(me.username)}
+              <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden>
+                <circle cx="12" cy="8.2" r="3.9" fill="currentColor" />
+                <path d="M4.4 20.2c0-4 3.4-6.3 7.6-6.3s7.6 2.3 7.6 6.3z" fill="currentColor" />
+              </svg>
             </button>
             {menuOpen && (
               <div className="menu" role="menu">

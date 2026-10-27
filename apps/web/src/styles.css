@@ -990,9 +990,9 @@ h2 {
   border: 1px solid var(--line);
   background: var(--brand);
   color: #fff;
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
