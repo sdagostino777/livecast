@@ -200,11 +200,15 @@ export function Admin() {
     });
   }
 
-  async function publishFromBrowser(kind: "camera" | "screen", streamId: string, startFirst: boolean) {
+  /**
+   * Connects the camera or screen to the media server. This is configuration,
+   * not transmission: the broadcast stays a draft and nobody sees it until the
+   * operator presses "Vai in onda".
+   */
+  async function publishFromBrowser(kind: "camera" | "screen") {
     setPubError(null);
     setBusy(true);
     try {
-      if (startFirst) await api.post(`/api/admin/streams/${streamId}/start`);
       const ingest = await api.get<{ server: string }>("/api/admin/ingest");
       const parsed = new URL(ingest.server);
       const user = parsed.searchParams.get("user") ?? "";
@@ -247,7 +251,7 @@ export function Admin() {
         });
       });
       setPubKind(kind);
-      notify("Pubblicazione dal browser avviata.");
+      notify("Camera collegata. Premi «Vai in onda» quando è tutto pronto.");
       await refresh();
     } catch (err) {
       stopPublishing();
@@ -439,23 +443,24 @@ export function Admin() {
 
             <div className="obs">
               <p className="small" style={{ margin: 0 }}>
-                <b>Pubblica dal browser</b> (senza OBS): camera o schermo direttamente da qui. La pagina deve restare
-                aperta durante la trasmissione — se la ricarichi o la chiudi, la diretta si interrompe. Per eventi
-                lunghi conviene OBS, che riconnette da solo.
+                <b>Collega la camera o lo schermo</b> (senza OBS): qui vedi l'anteprima e il collegamento al server,
+                ma <b>nessuno spettatore ti vede</b> finché non premi <b>Vai in onda</b>. La pagina deve restare aperta
+                durante la trasmissione — se la ricarichi o la chiudi, la diretta si interrompe. Per eventi lunghi
+                conviene OBS, che riconnette da solo.
               </p>
               {pubKind === null ? (
                 <div className="row wrap">
                   <button
                     className="btn btn-primary btn-small"
                     disabled={busy}
-                    onClick={() => void publishFromBrowser("camera", current.id, !active)}
+                    onClick={() => void publishFromBrowser("camera")}
                   >
                     Pubblica da camera
                   </button>
                   <button
                     className="btn btn-ghost btn-small"
                     disabled={busy}
-                    onClick={() => void publishFromBrowser("screen", current.id, !active)}
+                    onClick={() => void publishFromBrowser("screen")}
                   >
                     Condividi schermo
                   </button>
@@ -464,8 +469,17 @@ export function Admin() {
                 <>
                   <video ref={pubVideo} autoPlay muted playsInline className="pub-preview" />
                   <p className="small" style={{ margin: 0 }}>
-                    In pubblicazione dal browser ({pubKind === "camera" ? "camera" : "schermo"}).{" "}
-                    <b>Non ricaricare la pagina.</b>
+                    {pubKind === "camera" ? "Camera" : "Schermo"} collegato —{" "}
+                    {active ? (
+                      <>
+                        <b>in onda</b>. <b>Non ricaricare la pagina.</b>
+                      </>
+                    ) : (
+                      <>
+                        <b>anteprima</b>: gli spettatori non ti vedono ancora. Premi <b>Vai in onda</b> quando sei
+                        pronto (e non ricaricare questa pagina).
+                      </>
+                    )}
                   </p>
                   <div>
                     <button className="btn btn-danger btn-small" disabled={busy} onClick={stopPublishing}>
