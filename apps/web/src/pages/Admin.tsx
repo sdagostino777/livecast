@@ -222,9 +222,14 @@ export function Admin() {
       media.getTracks().forEach((track) => pc.addTrack(track, media));
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const res = await fetch(`/live/whip?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`, {
+      // WHIP (WebRTC) does not accept user/pass query parameters: MediaMTX
+      // authenticates them with HTTP Basic auth, and only then validates the SDP.
+      const res = await fetch("/live/whip", {
         method: "POST",
-        headers: { "content-type": "application/sdp" },
+        headers: {
+          "content-type": "application/sdp",
+          authorization: `Basic ${btoa(`${user}:${pass}`)}`,
+        },
         body: offer.sdp,
       });
       if (!res.ok) throw new Error(`WHIP ${res.status}`);
