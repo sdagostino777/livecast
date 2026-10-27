@@ -1,9 +1,20 @@
 name: ci
 
 on:
+  # Runs on code. Documentation, screenshots and PDFs do not need a build:
+  # every docs commit used to start two jobs and notify the owner.
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "LICENSE"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - "LICENSE"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -45,4 +56,4 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck infra/scripts/*.sh
+          shellcheck install.sh infra/scripts/*.sh
