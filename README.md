@@ -39,7 +39,7 @@ code is organised around failure, not around convenience. See
 | **No PIN on the link** | By decision: an open transmission. The slug is random and unindexed, which keeps it out of search results without pretending it is access control. |
 | **Two kinds of broadcast** | Video (720/480/360 ladder) and audio-only (128 kbps AAC) share the same pipeline; the audio mode drops any video the publisher sends instead of paying for an encoder chain nobody watches. |
 | **Users, not just an account** | One admin manages accounts; operators can run broadcasts. The admin account itself cannot be deleted or have its password reset by anyone else. |
-| **Event poster and icon** | Each broadcast carries a 16:9 poster (what viewers see before pressing play) and a square icon (lists), uploaded from the panel — or generated automatically from the title with a gradient, when nothing is uploaded. |
+| **Event poster** | Each broadcast carries a 16:9 poster — what viewers see before pressing play — uploaded from the panel, with an optional title drawn over it, or generated automatically from the title on a gradient. The install's own logo lives in **Configurazione**, not on the event. |
 | **Light / dark / system** | The panel follows a theme preference; the player stays dark on purpose. |
 | **Publishing without programma esterno** | Camera or screen share straight from the panel over WebRTC (WHIP); programma esterno stays supported for long events. |
 | **First-run safety** | The default `admin / admin` account must change its password before the panel does anything else. |
