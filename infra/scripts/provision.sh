@@ -115,10 +115,23 @@ MEDIAMTX_SRC="$(dirname "$0")/../mediamtx.yml.tpl"
 [ -f "${MEDIAMTX_SRC}" ] || MEDIAMTX_SRC="${APP_DIR}/app/infra/mediamtx.yml.tpl"
 [ -f "${MEDIAMTX_SRC}" ] || fail "mediamtx.yml.tpl not found (run provision.sh from the repo, or deploy first)"
 
-render "${MEDIAMTX_SRC}" > "${APP_DIR}/mediamtx.yml"
-chown "${APP_USER}:${APP_USER}" "${APP_DIR}/mediamtx.yml"
-chmod 640 "${APP_DIR}/mediamtx.yml"  # contains the publish password
-ok "rendered ${APP_DIR}/mediamtx.yml"
+MEDIAMTX_YML="${APP_DIR}/mediamtx.yml"
+render "${MEDIAMTX_SRC}" > "${MEDIAMTX_YML}.new"
+if ! cmp -s "${MEDIAMTX_YML}.new" "${MEDIAMTX_YML}" 2>/dev/null; then
+  mv "${MEDIAMTX_YML}.new" "${MEDIAMTX_YML}"
+  chown "${APP_USER}:${APP_USER}" "${MEDIAMTX_YML}"
+  chmod 640 "${MEDIAMTX_YML}"  # contains the publish password
+  ok "rendered ${MEDIAMTX_YML} (changed)"
+  # Only restart on an actual change: re-running provisioning during an event
+  # must not drop the ingest connection for the sake of idempotence.
+  if systemctl is-active --quiet ndx-live-mediamtx; then
+    systemctl restart ndx-live-mediamtx
+    ok "ndx-live-mediamtx restarted to pick up the new config"
+  fi
+else
+  rm -f "${MEDIAMTX_YML}.new"
+  ok "mediamtx config unchanged"
+fi
 
 if [ ! -f "${APP_DIR}/app/.env" ]; then
   install -d -o "${APP_USER}" -g "${APP_USER}" -m 775 "${APP_DIR}/app"

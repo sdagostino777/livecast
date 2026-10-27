@@ -30,6 +30,16 @@ authInternalUsers:
       - action: read
         path: live
 
+  # The control API on loopback is how the panel knows whether OBS is connected.
+  # Replacing the default "any" user above would otherwise leave /v3/paths/get
+  # returning "authentication error" to our own app on 127.0.0.1.
+  - user: any
+    pass:
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: api
+        path:
+
 # Control API on loopback only: the Fastify app reads ingest status from it.
 api: yes
 apiAddress: 127.0.0.1:9997
