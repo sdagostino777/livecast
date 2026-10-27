@@ -83,7 +83,8 @@ a broadcast from the panel and press play on `/live/<slug>`.
   own files on disk.
 - **Configurazione** — public URL, **CDN base URL, ingest host/port**: switching
   delivery to a CDN is a URL and a click, no redeploy. "Verifica CDN" probes the
-  live manifest through the CDN edge and reports the cache header it saw.
+  live manifest through the CDN edge and reports the cache header it saw. The
+  step-by-step attach procedure is [`docs/CDN.md`](docs/CDN.md).
 - **Sicurezza** — password change (revokes other sessions) and TOTP 2FA.
 
 ## Configuration

@@ -102,7 +102,22 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // Node at all. Registering it here costs one conditional.
   const hlsRoot = path.join(config.dataDir, "hls");
   if (fs.existsSync(hlsRoot)) {
-    await app.register(fastifyStatic, { root: hlsRoot, prefix: "/hls/", wildcard: true, decorateReply: false });
+    await app.register(fastifyStatic, {
+      root: hlsRoot,
+      prefix: "/hls/",
+      wildcard: true,
+      decorateReply: false,
+      // When a CDN is configured, the player on the origin domain fetches
+      // manifests and segments from the CDN host — a cross-origin request that
+      // hls.js makes with fetch/XHR and the browser blocks without CORS. The
+      // content is public, so a wildcard origin is the correct answer here; it
+      // is set at the origin too so any CDN that passes headers through keeps
+      // working even if its own CORS switch is off.
+      setHeaders(res) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      },
+    });
   }
 
   const webRoot = opts.webRoot ?? config.webRoot;

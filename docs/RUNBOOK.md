@@ -20,7 +20,9 @@ minutes by default) rather than waiting forever — restart it from the panel.
 
 ## Attaching a CDN from the panel ("a few clicks")
 
-The CDN is a pull zone over the origin; the app never pushes to it.
+The CDN is a pull zone over the origin; the app never pushes to it. The full
+procedure, including the CORS requirement and the cache policy the origin
+already sends, is [`docs/CDN.md`](CDN.md).
 
 1. In the CDN provider (Bunny, Cloudflare, Fastly), create a **pull zone** whose
    origin is `https://<domain>` (the live VPS). Enable caching for `/hls/*`.
