@@ -1,5 +1,16 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, iconSrc, Me, posterSrc, PublicUser, StreamView, uploadStreamImage } from "../api";
+import {
+  api,
+  ApiError,
+  iconSrc,
+  Me,
+  posterSrc,
+  PublicUser,
+  removeBrandLogo,
+  StreamView,
+  uploadBrandLogo,
+  uploadStreamImage,
+} from "../api";
 import { useBrand } from "../brand";
 import { BrandMark } from "../components/BrandMark";
 import { formatDate, navigate } from "../router";
@@ -105,6 +116,8 @@ export function AdminSettings() {
 
       {error && <div className="banner banner-error">{error}</div>}
       {toast && <div className="banner banner-ok">{toast}</div>}
+
+      <IdentitySection notify={notify} />
 
       <ThemeSection />
 
@@ -212,6 +225,155 @@ const PALETTES: Array<{ value: string; label: string; css: string }> = [
   { value: "slate", label: "Ardesia", css: "linear-gradient(135deg,#12212e,#3f6076)" },
   { value: "plum", label: "Prugna", css: "linear-gradient(135deg,#3a1f3d,#8d4a63)" },
 ];
+
+/**
+ * Who the audience is watching: the name and the logo are the install's own, and
+ * they appear in the panel, on the player page and in link previews.
+ */
+function IdentitySection({ notify }: { notify: (message: string) => void }) {
+  const [name, setName] = useState("");
+  const [savedName, setSavedName] = useState("");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const logoRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<{ brandName: string }>("/api/admin/settings")
+      .then((settings) => {
+        if (!alive) return;
+        setName(settings.brandName);
+        setSavedName(settings.brandName);
+      })
+      .catch(() => alive && setError("Impossibile leggere il nome del servizio."));
+    api
+      .get<{ logoUrl: string | null }>("/api/brand")
+      .then((brand) => alive && setLogoUrl(brand.logoUrl))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await api.put<{ brandName: string }>("/api/admin/settings", { brandName: name.trim() });
+      setSavedName(saved.brandName);
+      document.title = saved.brandName;
+      notify("Nome aggiornato.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeLogo(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await uploadBrandLogo(file);
+      setLogoUrl(saved.logoUrl);
+      setVersion((value) => value + 1);
+      notify("Logo aggiornato.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function dropLogo() {
+    setBusy(true);
+    try {
+      await removeBrandLogo();
+      setLogoUrl(null);
+      setVersion((value) => value + 1);
+      notify("Logo rimosso: torna il simbolo generato.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Identità</h2>
+        <span className="muted small">quello che vede chi riceve il link</span>
+      </div>
+
+      <div className="grid-2">
+        <label className="field">
+          <span>Nome del servizio</span>
+          <input
+            className="input"
+            value={name}
+            maxLength={40}
+            placeholder="Nome del servizio"
+            onChange={(event) => setName(event.target.value)}
+          />
+          <em className="muted">Appare nel pannello, sul player e nel titolo del browser.</em>
+        </label>
+
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="small muted">Logo</span>
+          <div className="row" style={{ gap: 14, alignItems: "center" }}>
+            {logoUrl ? (
+              <img
+                className="upload-preview"
+                style={{ width: 56, height: 56, borderRadius: 14, objectFit: "contain" }}
+                src={`${logoUrl}?v=${version}`}
+                alt="Logo attuale"
+              />
+            ) : (
+              <span className="brand-mark" style={{ width: 56, height: 56, borderRadius: 14 }}>
+                <svg viewBox="0 0 24 24" width={28} height={28} aria-hidden>
+                  <path d="M8 5v14l11-7z" fill="currentColor" />
+                </svg>
+              </span>
+            )}
+            <input
+              ref={logoRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void changeLogo(file);
+              }}
+            />
+            <div className="row wrap" style={{ gap: 8 }}>
+              <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => logoRef.current?.click()}>
+                {logoUrl ? "Cambia logo" : "Carica logo"}
+              </button>
+              {logoUrl && (
+                <button type="button" className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => void dropLogo()}>
+                  Rimuovi
+                </button>
+              )}
+            </div>
+          </div>
+          <em className="muted">PNG quadrato consigliato (512×512). Senza logo resta il simbolo generato.</em>
+        </div>
+      </div>
+
+      <div className="row wrap" style={{ marginTop: 14, justifyContent: "flex-end" }}>
+        <button className="btn btn-primary btn-small" disabled={busy || !name.trim() || name.trim() === savedName} onClick={() => void save()}>
+          Salva nome
+        </button>
+      </div>
+      {error && <p className="error-text small">{error}</p>}
+    </section>
+  );
+}
 
 function EventImagesSection({
   latest,

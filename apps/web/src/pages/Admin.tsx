@@ -1186,6 +1186,7 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
               className="input"
               value={form.brandName}
               maxLength={40}
+              placeholder="Nome del servizio"
               onChange={(e) => setField("brandName", e.target.value)}
             />
             <em className="muted">
