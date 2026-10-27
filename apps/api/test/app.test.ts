@@ -216,17 +216,38 @@ describe("admin + public stream lifecycle", () => {
     expect(endedPage.json().status).toBe("ended");
   });
 
-  it("refuses to start a second stream while one is active", async () => {
+  it("keeps exactly one broadcast: a new one replaces the configuration", async () => {
     const cookie = await login();
-    const a = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "a" } });
-    const b = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "b" } });
-    await app.inject({ method: "POST", url: `/api/admin/streams/${a.json().stream.id}/start`, headers: { cookie } });
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie },
+      payload: { title: "prima" },
+    });
     const second = await app.inject({
       method: "POST",
-      url: `/api/admin/streams/${b.json().stream.id}/start`,
+      url: "/api/admin/streams",
       headers: { cookie },
+      payload: { title: "seconda" },
     });
-    expect(second.statusCode).toBe(409);
+    expect(second.statusCode).toBe(201);
+
+    const list = await app.inject({ method: "GET", url: "/api/admin/streams", headers: { cookie } });
+    const rows = list.json().streams as Array<{ id: string; title: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.title).toBe("seconda");
+    expect(rows.some((row) => row.id === first.json().stream.id)).toBe(false);
+
+    // While on air a new configuration is refused.
+    await app.inject({ method: "POST", url: `/api/admin/streams/${rows[0]!.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+    const whileLive = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie },
+      payload: { title: "terza" },
+    });
+    expect(whileLive.statusCode).toBe(409);
   });
 
   it("reveals ingest credentials only to an authenticated admin, and audits it", async () => {
