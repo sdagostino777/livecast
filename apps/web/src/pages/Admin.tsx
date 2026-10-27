@@ -508,11 +508,16 @@ export function Admin() {
             {active && <ObsPanel ov={ov} />}
           </div>
         ) : (
-          <div className="stack">
-            <p className="muted small">Nessuna diretta attiva. Crea la prossima qui sotto.</p>
-            <NewStreamForm disabled={busy} onCreate={createDraft} />
-          </div>
+          <p className="muted small">Nessuna diretta: creane una qui sotto con «Nuova diretta».</p>
         )}
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Nuova diretta</h2>
+          <span className="muted small">titolo, tipo e immagini — poi si manda in onda</span>
+        </div>
+        <NewStreamForm disabled={busy} onCreate={createDraft} />
       </section>
 
       <section className="card">
@@ -640,9 +645,10 @@ function NewStreamForm({
       <div className="row wrap">
         <input
           className="input grow"
-          placeholder="Titolo della diretta (es. Congresso Regionale / Evento semestrale)"
+          placeholder="Titolo — es. Congresso Regionale / Evento semestrale"
           value={title}
           maxLength={120}
+          autoFocus
           onChange={(e) => setTitle(e.target.value)}
         />
         <div className="choice" role="radiogroup" aria-label="Tipo di trasmissione">

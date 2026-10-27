@@ -208,7 +208,17 @@ h2 {
 .input:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(29, 91, 165, 0.18);
+  background: #fbfdff;
+  box-shadow:
+    0 0 0 4px rgba(29, 91, 165, 0.22),
+    0 6px 18px rgba(29, 91, 165, 0.15);
+}
+
+[data-theme="dark"] .input:focus {
+  background: #1f2d3c;
+  box-shadow:
+    0 0 0 4px rgba(79, 143, 206, 0.3),
+    0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
 .grow {
