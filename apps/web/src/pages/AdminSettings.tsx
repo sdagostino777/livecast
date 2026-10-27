@@ -10,24 +10,9 @@ import {
   StreamView,
   uploadBrandLogo,
 } from "../api";
-import { useBrand } from "../brand";
+import { setBrandLogo, setBrandName, useBrand } from "../brand";
 import { BrandMark } from "../components/BrandMark";
 import { formatDate, navigate } from "../router";
-
-/**
- * The tab icon follows the install's logo. Called after every logo change so the
- * browser does not keep showing the old symbol until the next reload.
- */
-export function applyTabIcon(logoUrl: string | null): void {
-  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (!link) return;
-  if (logoUrl) link.href = logoUrl;
-  else link.href = DEFAULT_TAB_ICON;
-}
-
-/** The play symbol the project ships with, restored when no logo is uploaded. */
-const DEFAULT_TAB_ICON =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0a'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23ff3b30'/%3E%3Cpath d='M13 12.5 21 16l-8 3.5z' fill='white'/%3E%3C/svg%3E";
 
 function friendlyError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -515,7 +500,7 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       const saved = await uploadBrandLogo(file);
       setLogoUrl(saved.logoUrl);
       setLogoVersion((version) => version + 1);
-      applyTabIcon(saved.logoUrl);
+      setBrandLogo(saved.logoUrl);
       notify("Logo aggiornato: cambia anche l'icona della scheda.");
     } catch (err) {
       setError(friendlyError(err));
@@ -530,7 +515,7 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       await removeBrandLogo();
       setLogoUrl(null);
       setLogoVersion((version) => version + 1);
-      applyTabIcon(null);
+      setBrandLogo(null);
       notify("Logo rimosso: torna il simbolo generato.");
     } catch (err) {
       setError(friendlyError(err));
@@ -582,8 +567,8 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       setForm(saved);
       setMessage("Impostazioni salvate.");
       notify("Impostazioni salvate.");
-      document.title = saved.brandName;
-      applyTabIcon(logoUrl);
+      setBrandName(saved.brandName);
+      setBrandLogo(logoUrl);
     } catch (err) {
       setError(friendlyError(err));
     } finally {
