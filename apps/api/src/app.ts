@@ -20,6 +20,7 @@ import { SettingsStore, type RuntimeSettings } from "./settings.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { liveRoutes } from "./routes/live.js";
+import { imageDimensions } from "./images.js";
 import { getStreamBySlug, reconcileOrphans } from "./streams.js";
 import { SignalWatchdog } from "./services/watchdog.js";
 
@@ -225,6 +226,20 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         : row.icon_ext
           ? `${base}/uploads/${row.slug}.icon.${row.icon_ext}`
           : null;
+      // Real dimensions, when the file can be read, so the preview is not cropped.
+      const imageFile = row.poster_ext
+        ? path.join(config.dataDir, "uploads", `${row.slug}.poster.${row.poster_ext}`)
+        : row.icon_ext
+          ? path.join(config.dataDir, "uploads", `${row.slug}.icon.${row.icon_ext}`)
+          : null;
+      let size: { width: number; height: number } | null = null;
+      if (imageFile) {
+        try {
+          size = imageDimensions(fs.readFileSync(imageFile));
+        } catch {
+          size = null;
+        }
+      }
       const tags = [
         `<title>${escape(title)}</title>`,
         `<meta name="description" content="${escape(description)}">`,
@@ -235,10 +250,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         `<meta property="og:url" content="${base}/live/${row.slug}">`,
         image ? `<meta property="og:image" content="${escape(image)}">` : "",
         image ? `<meta property="og:image:alt" content="${escape(row.title)}">` : "",
-        row.poster_ext ? `<meta property="og:image:width" content="1280">` : "",
-        row.poster_ext ? `<meta property="og:image:height" content="720">` : "",
-        row.icon_ext && !row.poster_ext ? `<meta property="og:image:width" content="512">` : "",
-        row.icon_ext && !row.poster_ext ? `<meta property="og:image:height" content="512">` : "",
+        size ? `<meta property="og:image:width" content="${size.width}">` : "",
+        size ? `<meta property="og:image:height" content="${size.height}">` : "",
         `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}">`,
         `<meta name="twitter:title" content="${escape(title)}">`,
         `<meta name="twitter:description" content="${escape(description)}">`,
