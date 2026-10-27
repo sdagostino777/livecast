@@ -256,7 +256,9 @@ export function MediaPlayer({ hlsUrl, kind, live, ended, title, brand, posterUrl
 
       {kind === "audio" && overlay}
 
-      {kind === "video" && (
+      {/* The bar exists to pause: before playback the overlay button is the only
+          thing on screen, so the artwork stays clean. */}
+      {kind === "video" && playing && (
         <div className="player-controls">
           <button
             className="control-button"
