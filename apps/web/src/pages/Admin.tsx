@@ -1,21 +1,10 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import {
-  api,
-  ApiError,
-  Checks,
-  Me,
-  Overview,
-  posterSrc,
-  removeBrandLogo,
-  Settings,
-  StreamView,
-  uploadBrandLogo,
-  uploadStreamImage,
-} from "../api";
+import { api, ApiError, Me, Overview, posterSrc, StreamView, uploadStreamImage } from "../api";
 import { useBrand } from "../brand";
 import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
 import { copyToClipboard, navigate } from "../router";
+import { Theme, useTheme } from "../theme";
 
 function friendlyError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -35,6 +24,47 @@ function friendlyError(err: unknown): string {
     }
   }
   return "Impossibile contattare il server.";
+}
+
+/**
+ * Light, dark or system, one tap each. Three small symbols in the header beat a
+ * settings page nobody opens: the theme is a preference, not configuration.
+ */
+function ThemeSwitch() {
+  const [theme, setTheme] = useTheme();
+  const options: Array<{ value: Theme; label: string; path: string }> = [
+    {
+      value: "light",
+      label: "Tema chiaro",
+      path: "M12 4.2v1.6M12 18.2v1.6M4.2 12H5.8M18.2 12h1.6M6.5 6.5l1.1 1.1M16.4 16.4l1.1 1.1M17.5 6.5l-1.1 1.1M7.6 16.4l-1.1 1.1",
+    },
+    { value: "dark", label: "Tema scuro", path: "M20 13.4A8 8 0 1 1 10.6 4a6.4 6.4 0 0 0 9.4 9.4z" },
+    {
+      value: "system",
+      label: "Segui il sistema",
+      path: "M4 5.5h16v10H4zM9 19.5h6M12 15.5v4",
+    },
+  ];
+  return (
+    <div className="theme-switch" role="radiogroup" aria-label="Tema">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          title={option.label}
+          aria-label={option.label}
+          aria-pressed={theme === option.value}
+          className={`theme-btn${theme === option.value ? " active" : ""}`}
+          onClick={() => setTheme(option.value)}
+        >
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+            <path d={option.path} strokeLinecap="round" strokeLinejoin="round" />
+            {option.value === "light" && <circle cx="12" cy="12" r="3.6" />}
+          </svg>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function statusLabel(ov: Overview | null): string {
@@ -416,12 +446,7 @@ export function Admin() {
       <header className="admin-top">
         <BrandMark name={brand} />
         <div className="admin-user">
-          <button className="icon-btn" title="Impostazioni" aria-label="Impostazioni" onClick={() => guardLeave(() => navigate("/admin/settings"))}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <circle cx="12" cy="12" r="3.2" />
-              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
-            </svg>
-          </button>
+          <ThemeSwitch />
           <div className="avatar-menu" onClick={(event) => event.stopPropagation()}>
             <button className="avatar" onClick={() => setMenuOpen((open) => !open)} aria-label="Menu utente">
               <svg viewBox="0 0 24 24" width="21" height="21" aria-hidden>
@@ -435,6 +460,9 @@ export function Admin() {
                   <span>{me.username}</span>
                   <span className="pill">{me.role === "admin" ? "admin" : "conduttore"}</span>
                 </div>
+                <button className="menu-item" onClick={() => guardLeave(() => navigate("/admin/settings"))}>
+                  Impostazioni
+                </button>
                 <button className="menu-item" onClick={() => guardLeave(() => void logout())}>
                   Esci
                 </button>
@@ -588,8 +616,6 @@ export function Admin() {
         {onAir && <ExternalEncoderPanel ov={ov} />}
       </section>
 
-      <SettingsPanel notify={notify} />
-      <MaintenancePanel notify={notify} />
 
       {leavePrompt && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
@@ -972,319 +998,5 @@ function ExternalEncoderPanel({ ov }: { ov: Overview | null }) {
         </button>
       )}
     </div>
-  );
-}
-
-function MaintenancePanel({ notify }: { notify: (m: string) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string[] | null>(null);
-  const [logs, setLogs] = useState<{ source: string; lines: string[] } | null>(null);
-  const [openLogs, setOpenLogs] = useState(false);
-
-  async function reset() {
-    if (!window.confirm("Chiudere le trasmissioni rimaste appese e rimuovere i segmenti?")) return;
-    setBusy(true);
-    try {
-      const res = await api.post<{ cleaned: string[] }>("/api/admin/broadcast/reset");
-      setResult(res.cleaned.length ? res.cleaned : ["niente da fare"]);
-      notify("Pulizia completata.");
-    } catch {
-      setResult(["operazione non riuscita"]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function loadLogs() {
-    setOpenLogs((open) => !open);
-    try {
-      const res = await api.get<{ source: string; lines: string[] }>("/api/admin/logs?lines=200");
-      setLogs({ source: res.source, lines: res.lines.slice(-200) });
-    } catch {
-      setLogs({ source: "errore", lines: ["impossibile leggere i log"] });
-    }
-  }
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Manutenzione</h2>
-        <button className="btn btn-ghost btn-small" onClick={() => void loadLogs()}>
-          {openLogs ? "Nascondi log" : "Mostra log"}
-        </button>
-      </div>
-
-      <div className="row wrap">
-        <button className="btn btn-danger" disabled={busy} onClick={() => void reset()}>
-          Termina trasmissioni appese
-        </button>
-        <span className="muted small">
-          Chiude la diretta in corso, riporta a «pronta» ogni stato rimasto appeso e cancella i segmenti.
-        </span>
-      </div>
-
-      {result && (
-        <div className="banner banner-ok" style={{ marginTop: 12 }}>
-          <span className="small">{result.join(" · ")}</span>
-        </div>
-      )}
-
-      {openLogs && (
-        <>
-          <p className="muted small" style={{ marginBottom: 6 }}>
-            Sorgente: {logs?.source ?? "…"}
-          </p>
-          <pre className="log-view">{(logs?.lines ?? []).join("\n") || "nessuna riga"}</pre>
-        </>
-      )}
-    </section>
-  );
-}
-
-function SettingsPanel({ notify }: { notify: (m: string) => void }) {
-  const [form, setForm] = useState<Settings | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [checks, setChecks] = useState<Checks | null>(null);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [logoVersion, setLogoVersion] = useState(0);
-  const logoRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    api
-      .get<Settings>("/api/admin/settings")
-      .then(setForm)
-      .catch(() => setError("Impossibile leggere le impostazioni."));
-    api
-      .get<{ name: string; logoUrl: string | null }>("/api/brand")
-      .then((brand) => setLogoUrl(brand.logoUrl))
-      .catch(() => undefined);
-  }, []);
-
-  async function changeLogo(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = await uploadBrandLogo(file);
-      setLogoUrl(saved.logoUrl);
-      setLogoVersion((version) => version + 1);
-      notify("Logo aggiornato.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function dropLogo() {
-    setBusy(true);
-    try {
-      await removeBrandLogo();
-      setLogoUrl(null);
-      setLogoVersion((version) => version + 1);
-      notify("Logo rimosso: torna il simbolo generato.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    let alive = true;
-    const tick = () => {
-      api
-        .get<Checks>("/api/admin/checks")
-        .then((c) => alive && setChecks(c))
-        .catch(() => alive && setChecks(null));
-    };
-    tick();
-    const timer = window.setInterval(tick, 10000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  function led(ok: boolean | null) {
-    return <span className={`dot ${ok === null ? "off" : ok ? "on" : ""}`} aria-hidden />;
-  }
-
-  if (!form) return null;
-
-  function setField<K extends keyof Settings>(key: K, value: string | number) {
-    setForm({ ...form!, [key]: value } as Settings);
-  }
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    if (!form) return;
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const saved = await api.put<Settings>("/api/admin/settings", {
-        brandName: form.brandName,
-        publicBaseUrl: form.publicBaseUrl,
-        cdnBaseUrl: form.cdnBaseUrl,
-        ingestHost: form.ingestHost,
-        ingestPort: Number(form.ingestPort) || 1935,
-      });
-      setForm(saved);
-      setMessage("Impostazioni salvate.");
-      notify("Impostazioni salvate.");
-      document.title = saved.brandName;
-      const tabIcon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-      if (tabIcon && logoUrl) tabIcon.href = `${logoUrl}?v=${logoVersion}`;
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function testCdn() {
-    if (!form) return;
-    setBusy(true);
-    try {
-      const target = form.cdnBaseUrl || form.publicBaseUrl;
-      const res = await api.post<{ ok: boolean; probe: string; status?: number; headers?: Record<string, string | null> }>(
-        "/api/admin/cdn-test",
-        { url: target },
-      );
-      notify(res.ok ? "CDN raggiungibile." : "CDN non raggiungibile.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Configurazione</h2>
-        <button className="btn btn-ghost btn-small" onClick={() => void testCdn()} disabled={busy}>
-          Verifica CDN
-        </button>
-      </div>
-
-      <div className={`banner ${checks?.cdnEnabled ? "banner-ok" : "banner-error"}`} style={{ marginBottom: 18 }}>
-        <span className="small">
-          {checks?.cdnEnabled
-            ? "CDN attiva: impianto adatto a migliaia di spettatori. Verifica che i LED siano verdi prima dell'evento."
-            : "Capacità del VPS: fino a ~500 spettatori simultanei il VPS da solo basta. Oltre serve la CDN: imposta l'URL qui sotto e verifica il LED verde."}
-        </span>
-      </div>
-
-      <form className="grid-2" onSubmit={save}>
-        <div className="span-2 row wrap" style={{ gap: 16, alignItems: "flex-start" }}>
-          <label className="field grow" style={{ minWidth: 260 }}>
-            <span>Nome del servizio</span>
-            <input
-              className="input"
-              value={form.brandName}
-              maxLength={40}
-              placeholder="Nome del servizio"
-              onChange={(e) => setField("brandName", e.target.value)}
-            />
-            <em className="muted">
-              Il nome che gli spettatori leggono ovunque: pagina, player, titolo del browser. Il progetto è tuo, il nome
-              lo scegli tu.
-            </em>
-          </label>
-          <div className="stack" style={{ gap: 8, minWidth: 220 }}>
-            <span className="small muted">Simbolo accanto al nome</span>
-            <div className="row" style={{ gap: 12, alignItems: "center" }}>
-              {logoUrl ? (
-                <img
-                  className="upload-preview"
-                  style={{ width: 52, height: 52, borderRadius: 14, objectFit: "contain" }}
-                  src={`${logoUrl}?v=${logoVersion}`}
-                  alt="Logo attuale"
-                />
-              ) : (
-                <span className="brand-mark" style={{ width: 52, height: 52, borderRadius: 14 }}>
-                  <svg viewBox="0 0 24 24" width={26} height={26} aria-hidden>
-                    <path d="M8 5v14l11-7z" fill="currentColor" />
-                  </svg>
-                </span>
-              )}
-              <div className="stack" style={{ gap: 6 }}>
-                <input
-                  ref={logoRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  hidden
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void changeLogo(file);
-                  }}
-                />
-                <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => logoRef.current?.click()}>
-                  {logoUrl ? "Cambia logo" : "Carica logo"}
-                </button>
-                {logoUrl && (
-                  <button type="button" className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => void dropLogo()}>
-                    Rimuovi
-                  </button>
-                )}
-              </div>
-            </div>
-            <em className="muted">PNG quadrato consigliato (512×512). Senza logo resta il simbolo generato.</em>
-          </div>
-        </div>
-
-        <label className="field">
-          <span className="row">{led(checks?.origin.ok ?? null)} URL pubblico</span>
-          <input className="input" value={form.publicBaseUrl} onChange={(e) => setField("publicBaseUrl", e.target.value)} />
-          <em className="muted">Il dominio della diretta, con https://. Il LED verifica che risponda dal server.</em>
-        </label>
-        <label className="field">
-          <span className="row">{led(checks?.cdnEnabled ? (checks.cdn?.ok ?? false) : null)} CDN (opzionale)</span>
-          <input
-            className="input"
-            value={form.cdnBaseUrl}
-            placeholder="https://cdn.esempio.com"
-            onChange={(e) => setField("cdnBaseUrl", e.target.value)}
-          />
-          <em className="muted">
-            Vuoto = spettatori serviti dal VPS. Con una CDN, i segmenti arrivano dall'edge e il VPS regge carichi molto
-            più grandi.
-          </em>
-        </label>
-        <label className="field">
-          <span className="row">{led(checks?.ingestTcp ?? null)} Host ingest</span>
-          <input className="input" value={form.ingestHost} onChange={(e) => setField("ingestHost", e.target.value)} />
-          <em className="muted">Può differire dal dominio pubblico (es. IP del VPS). Il LED verifica la porta RTMP.</em>
-        </label>
-        <label className="field">
-          <span>Porta ingest</span>
-          <input
-            className="input"
-            type="number"
-            min={1}
-            max={65535}
-            value={form.ingestPort}
-            onChange={(e) => setField("ingestPort", Number(e.target.value))}
-          />
-          <em className="muted">Default 1935 (RTMP).</em>
-        </label>
-
-        <div className="row-between span-2">
-          <span className="muted small">
-            In onda via: <code className="code-inline">{form.hlsBaseUrl}</code>
-          </span>
-          <button className="btn btn-primary btn-small" type="submit" disabled={busy}>
-            Salva
-          </button>
-        </div>
-      </form>
-
-      {message && <p className="ok-text small">{message}</p>}
-      {error && <p className="error-text small">{error}</p>}
-    </section>
   );
 }

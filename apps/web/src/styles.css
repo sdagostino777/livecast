@@ -991,6 +991,41 @@ h2 {
   color: var(--brand-strong);
 }
 
+/* Theme: three symbols in the header, one tap each. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.theme-btn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.theme-btn:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.theme-btn.active {
+  background: var(--brand);
+  color: #fff;
+}
+
 .avatar-menu {
   position: relative;
 }

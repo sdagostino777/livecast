@@ -2,19 +2,32 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   ApiError,
-  iconSrc,
+  Checks,
   Me,
-  posterSrc,
   PublicUser,
   removeBrandLogo,
+  Settings,
   StreamView,
   uploadBrandLogo,
-  uploadStreamImage,
 } from "../api";
 import { useBrand } from "../brand";
 import { BrandMark } from "../components/BrandMark";
 import { formatDate, navigate } from "../router";
-import { Theme, useTheme } from "../theme";
+
+/**
+ * The tab icon follows the install's logo. Called after every logo change so the
+ * browser does not keep showing the old symbol until the next reload.
+ */
+export function applyTabIcon(logoUrl: string | null): void {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (!link) return;
+  if (logoUrl) link.href = logoUrl;
+  else link.href = DEFAULT_TAB_ICON;
+}
+
+/** The play symbol the project ships with, restored when no logo is uploaded. */
+const DEFAULT_TAB_ICON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0a'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23ff3b30'/%3E%3Cpath d='M13 12.5 21 16l-8 3.5z' fill='white'/%3E%3C/svg%3E";
 
 function friendlyError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -102,6 +115,7 @@ export function AdminSettings() {
   }
 
   const latest = streams[0] ?? null;
+  void latest;
 
   return (
     <div className="admin">
@@ -117,41 +131,7 @@ export function AdminSettings() {
       {error && <div className="banner banner-error">{error}</div>}
       {toast && <div className="banner banner-ok">{toast}</div>}
 
-      <IdentitySection notify={notify} />
-
-      <ThemeSection />
-
-      <EventImagesSection
-        latest={latest}
-        busy={busy}
-        onPalette={(palette) => {
-          if (!latest) return;
-          void act(async () => {
-            await api.patch(`/api/admin/streams/${latest.id}`, { posterPalette: palette });
-            notify("Palette aggiornata.");
-          });
-        }}
-        onOverlay={(value) => {
-          if (!latest) return;
-          void act(async () => {
-            await api.patch(`/api/admin/streams/${latest.id}`, { posterOverlay: value });
-            notify(value ? "Nome sopra l'immagine attivo." : "Nome sopra l'immagine disattivo.");
-          });
-        }}
-        onUpload={(kind, file) => {
-        if (!latest) return;
-          void act(async () => {
-            await uploadStreamImage(latest.id, kind, file);
-            notify(kind === "poster" ? "Poster aggiornato." : "Icona aggiornata.");
-          });
-        }}
-        onRemove={(kind) => {
-        if (!latest) return;
-        void act(async () => {
-          await api.del(`/api/admin/streams/${latest.id}/${kind}`);
-          notify(kind === "poster" ? "Poster rimosso." : "Icona rimossa.");
-        });
-      }} />
+      <SettingsPanel notify={notify} />
 
       <SecurityPanel notify={notify} />
 
@@ -180,329 +160,9 @@ export function AdminSettings() {
           }}
         />
       )}
+
+      <MaintenancePanel notify={notify} />
     </div>
-  );
-}
-
-function ThemeSection() {
-  const [theme, setTheme] = useTheme();
-  const options: Array<{ value: Theme; label: string; icon: string }> = [
-    { value: "light", label: "Chiaro", icon: "☀" },
-    { value: "dark", label: "Scuro", icon: "☾" },
-    { value: "system", label: "Sistema", icon: "▣" },
-  ];
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Aspetto</h2>
-      </div>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Il tema si applica a questa installazione nel tuo browser. Il player resta scuro: un video su fondo chiaro è
-        più faticoso da guardare.
-      </p>
-      <div className="segmented" role="radiogroup" aria-label="Tema">
-        {options.map((option) => (
-          <label key={option.value} className={theme === option.value ? "active" : ""}>
-            <input
-              type="radio"
-              name="theme"
-              checked={theme === option.value}
-              onChange={() => setTheme(option.value)}
-            />
-            <span aria-hidden>{option.icon}</span>
-            {option.label}
-          </label>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const PALETTES: Array<{ value: string; label: string; css: string }> = [
-  { value: "blue", label: "Blu", css: "linear-gradient(135deg,#0f3559,#2a6cb6)" },
-  { value: "teal", label: "Petrolio", css: "linear-gradient(135deg,#0b3b4a,#1d7a8c)" },
-  { value: "indigo", label: "Indaco", css: "linear-gradient(135deg,#1e1a4d,#4f46a5)" },
-  { value: "slate", label: "Ardesia", css: "linear-gradient(135deg,#12212e,#3f6076)" },
-  { value: "plum", label: "Prugna", css: "linear-gradient(135deg,#3a1f3d,#8d4a63)" },
-];
-
-/**
- * Who the audience is watching: the name and the logo are the install's own, and
- * they appear in the panel, on the player page and in link previews.
- */
-function IdentitySection({ notify }: { notify: (message: string) => void }) {
-  const [name, setName] = useState("");
-  const [savedName, setSavedName] = useState("");
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const logoRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .get<{ brandName: string }>("/api/admin/settings")
-      .then((settings) => {
-        if (!alive) return;
-        setName(settings.brandName);
-        setSavedName(settings.brandName);
-      })
-      .catch(() => alive && setError("Impossibile leggere il nome del servizio."));
-    api
-      .get<{ logoUrl: string | null }>("/api/brand")
-      .then((brand) => alive && setLogoUrl(brand.logoUrl))
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = await api.put<{ brandName: string }>("/api/admin/settings", { brandName: name.trim() });
-      setSavedName(saved.brandName);
-      document.title = saved.brandName;
-      notify("Nome aggiornato.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function changeLogo(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = await uploadBrandLogo(file);
-      setLogoUrl(saved.logoUrl);
-      setVersion((value) => value + 1);
-      notify("Logo aggiornato.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function dropLogo() {
-    setBusy(true);
-    try {
-      await removeBrandLogo();
-      setLogoUrl(null);
-      setVersion((value) => value + 1);
-      notify("Logo rimosso: torna il simbolo generato.");
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Identità</h2>
-        <span className="muted small">quello che vede chi riceve il link</span>
-      </div>
-
-      <div className="grid-2">
-        <label className="field">
-          <span>Nome del servizio</span>
-          <input
-            className="input"
-            value={name}
-            maxLength={40}
-            placeholder="Nome del servizio"
-            onChange={(event) => setName(event.target.value)}
-          />
-          <em className="muted">Appare nel pannello, sul player e nel titolo del browser.</em>
-        </label>
-
-        <div className="stack" style={{ gap: 8 }}>
-          <span className="small muted">Logo</span>
-          <div className="row" style={{ gap: 14, alignItems: "center" }}>
-            {logoUrl ? (
-              <img
-                className="upload-preview"
-                style={{ width: 56, height: 56, borderRadius: 14, objectFit: "contain" }}
-                src={`${logoUrl}?v=${version}`}
-                alt="Logo attuale"
-              />
-            ) : (
-              <span className="brand-mark" style={{ width: 56, height: 56, borderRadius: 14 }}>
-                <svg viewBox="0 0 24 24" width={28} height={28} aria-hidden>
-                  <path d="M8 5v14l11-7z" fill="currentColor" />
-                </svg>
-              </span>
-            )}
-            <input
-              ref={logoRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void changeLogo(file);
-              }}
-            />
-            <div className="row wrap" style={{ gap: 8 }}>
-              <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => logoRef.current?.click()}>
-                {logoUrl ? "Cambia logo" : "Carica logo"}
-              </button>
-              {logoUrl && (
-                <button type="button" className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => void dropLogo()}>
-                  Rimuovi
-                </button>
-              )}
-            </div>
-          </div>
-          <em className="muted">PNG quadrato consigliato (512×512). Senza logo resta il simbolo generato.</em>
-        </div>
-      </div>
-
-      <div className="row wrap" style={{ marginTop: 14, justifyContent: "flex-end" }}>
-        <button className="btn btn-primary btn-small" disabled={busy || !name.trim() || name.trim() === savedName} onClick={() => void save()}>
-          Salva nome
-        </button>
-      </div>
-      {error && <p className="error-text small">{error}</p>}
-    </section>
-  );
-}
-
-function EventImagesSection({
-  latest,
-  busy,
-  onUpload,
-  onRemove,
-  onPalette,
-  onOverlay,
-}: {
-  latest: StreamView | null;
-  busy: boolean;
-  onUpload: (kind: "poster" | "icon", file: File) => void;
-  onRemove: (kind: "poster" | "icon") => void;
-  onPalette: (palette: string | null) => void;
-  onOverlay: (value: boolean) => void;
-}) {
-  const posterRef = useRef<HTMLInputElement | null>(null);
-  const iconRef = useRef<HTMLInputElement | null>(null);
-
-  return (
-    <section className="card">
-      <div className="card-head">
-        <h2>Evento</h2>
-        {latest && <span className="muted small">{latest.title}</span>}
-      </div>
-
-      {!latest ? (
-        <p className="muted small">Crea prima una diretta dal pannello: poster e icona appartengono alla diretta.</p>
-      ) : (
-        <div className="grid-2">
-          <div className="stack">
-            <p className="small" style={{ margin: 0 }}>
-              <b>Poster</b> (16:9): compare al posto del video prima che lo spettatore premi play.
-            </p>
-            <img className="upload-preview poster-preview" src={posterSrc(latest)} alt="Poster della diretta" />
-            {!latest.posterImageUrl && (
-              <>
-                <p className="muted small" style={{ margin: 0 }}>
-                  Template automatico con il titolo dell'evento. Scegli la palette:
-                </p>
-                <div className="row wrap">
-                  {PALETTES.map((palette) => (
-                    <button
-                      key={palette.value}
-                      type="button"
-                      title={palette.label}
-                      aria-label={palette.label}
-                      disabled={busy}
-                      onClick={() => onPalette(palette.value)}
-                      className={`swatch${latest.posterPalette === palette.value ? " active" : ""}`}
-                      style={{ background: palette.css }}
-                    />
-                  ))}
-                  <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => onPalette(null)}>
-                    Automatico
-                  </button>
-                </div>
-                {latest.posterPalette === null && (
-                  <p className="muted small" style={{ margin: 0 }}>
-                    “Automatico”: la palette viene scelta dal link della diretta.
-                  </p>
-                )}
-              </>
-            )}
-            {latest.posterImageUrl && (
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={latest.posterOverlay}
-                  disabled={busy}
-                  onChange={(event) => onOverlay(event.target.checked)}
-                />
-                Mostra il nome dell'evento sopra l'immagine
-              </label>
-            )}
-            <div className="row wrap">
-              <input
-                ref={posterRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) onUpload("poster", file);
-                  event.target.value = "";
-                }}
-              />
-              <button className="btn btn-primary btn-small" disabled={busy} onClick={() => posterRef.current?.click()}>
-                Carica poster
-              </button>
-              {latest.posterImageUrl && (
-                <button className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => onRemove("poster")}>
-                  Rimuovi
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="stack">
-            <p className="small" style={{ margin: 0 }}>
-              <b>Icona</b> (quadrata): compare negli elenchi delle dirette e accanto al titolo.
-            </p>
-            <img className="upload-preview icon-preview" src={iconSrc(latest)} alt="Icona della diretta" />
-            {!latest.iconUrl && <p className="muted small">Icona generata dalle iniziali del titolo.</p>}
-            <div className="row wrap">
-              <input
-                ref={iconRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) onUpload("icon", file);
-                  event.target.value = "";
-                }}
-              />
-              <button className="btn btn-primary btn-small" disabled={busy} onClick={() => iconRef.current?.click()}>
-                Carica icona
-              </button>
-              {latest.iconUrl && (
-                <button className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => onRemove("icon")}>
-                  Rimuovi
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -757,6 +417,324 @@ function SecurityPanel({ notify }: { notify: (m: string) => void }) {
           </button>
         </div>
       </form>
+    </section>
+  );
+}
+
+function MaintenancePanel({ notify }: { notify: (m: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string[] | null>(null);
+  const [logs, setLogs] = useState<{ source: string; lines: string[] } | null>(null);
+  const [openLogs, setOpenLogs] = useState(false);
+
+  async function reset() {
+    if (!window.confirm("Chiudere le trasmissioni rimaste appese e rimuovere i segmenti?")) return;
+    setBusy(true);
+    try {
+      const res = await api.post<{ cleaned: string[] }>("/api/admin/broadcast/reset");
+      setResult(res.cleaned.length ? res.cleaned : ["niente da fare"]);
+      notify("Pulizia completata.");
+    } catch {
+      setResult(["operazione non riuscita"]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadLogs() {
+    setOpenLogs((open) => !open);
+    try {
+      const res = await api.get<{ source: string; lines: string[] }>("/api/admin/logs?lines=200");
+      setLogs({ source: res.source, lines: res.lines.slice(-200) });
+    } catch {
+      setLogs({ source: "errore", lines: ["impossibile leggere i log"] });
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Manutenzione</h2>
+        <button className="btn btn-ghost btn-small" onClick={() => void loadLogs()}>
+          {openLogs ? "Nascondi log" : "Mostra log"}
+        </button>
+      </div>
+
+      <div className="row wrap">
+        <button className="btn btn-danger" disabled={busy} onClick={() => void reset()}>
+          Termina trasmissioni appese
+        </button>
+        <span className="muted small">
+          Chiude la diretta in corso, riporta a «pronta» ogni stato rimasto appeso e cancella i segmenti.
+        </span>
+      </div>
+
+      {result && (
+        <div className="banner banner-ok" style={{ marginTop: 12 }}>
+          <span className="small">{result.join(" · ")}</span>
+        </div>
+      )}
+
+      {openLogs && (
+        <>
+          <p className="muted small" style={{ marginBottom: 6 }}>
+            Sorgente: {logs?.source ?? "…"}
+          </p>
+          <pre className="log-view">{(logs?.lines ?? []).join("\n") || "nessuna riga"}</pre>
+        </>
+      )}
+    </section>
+  );
+}
+
+function SettingsPanel({ notify }: { notify: (m: string) => void }) {
+  const [form, setForm] = useState<Settings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [checks, setChecks] = useState<Checks | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoVersion, setLogoVersion] = useState(0);
+  const logoRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    api
+      .get<Settings>("/api/admin/settings")
+      .then(setForm)
+      .catch(() => setError("Impossibile leggere le impostazioni."));
+    api
+      .get<{ name: string; logoUrl: string | null }>("/api/brand")
+      .then((brand) => setLogoUrl(brand.logoUrl))
+      .catch(() => undefined);
+  }, []);
+
+  async function changeLogo(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await uploadBrandLogo(file);
+      setLogoUrl(saved.logoUrl);
+      setLogoVersion((version) => version + 1);
+      applyTabIcon(saved.logoUrl);
+      notify("Logo aggiornato: cambia anche l'icona della scheda.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function dropLogo() {
+    setBusy(true);
+    try {
+      await removeBrandLogo();
+      setLogoUrl(null);
+      setLogoVersion((version) => version + 1);
+      applyTabIcon(null);
+      notify("Logo rimosso: torna il simbolo generato.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      api
+        .get<Checks>("/api/admin/checks")
+        .then((c) => alive && setChecks(c))
+        .catch(() => alive && setChecks(null));
+    };
+    tick();
+    const timer = window.setInterval(tick, 10000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  function led(ok: boolean | null) {
+    return <span className={`dot ${ok === null ? "off" : ok ? "on" : ""}`} aria-hidden />;
+  }
+
+  if (!form) return null;
+
+  function setField<K extends keyof Settings>(key: K, value: string | number) {
+    setForm({ ...form!, [key]: value } as Settings);
+  }
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!form) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const saved = await api.put<Settings>("/api/admin/settings", {
+        brandName: form.brandName,
+        publicBaseUrl: form.publicBaseUrl,
+        cdnBaseUrl: form.cdnBaseUrl,
+        ingestHost: form.ingestHost,
+        ingestPort: Number(form.ingestPort) || 1935,
+      });
+      setForm(saved);
+      setMessage("Impostazioni salvate.");
+      notify("Impostazioni salvate.");
+      document.title = saved.brandName;
+      applyTabIcon(logoUrl);
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testCdn() {
+    if (!form) return;
+    setBusy(true);
+    try {
+      const target = form.cdnBaseUrl || form.publicBaseUrl;
+      const res = await api.post<{ ok: boolean; probe: string; status?: number; headers?: Record<string, string | null> }>(
+        "/api/admin/cdn-test",
+        { url: target },
+      );
+      notify(res.ok ? "CDN raggiungibile." : "CDN non raggiungibile.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Configurazione</h2>
+        <button className="btn btn-ghost btn-small" onClick={() => void testCdn()} disabled={busy}>
+          Verifica CDN
+        </button>
+      </div>
+
+      <div className={`banner ${checks?.cdnEnabled ? "banner-ok" : "banner-error"}`} style={{ marginBottom: 18 }}>
+        <span className="small">
+          {checks?.cdnEnabled
+            ? "CDN attiva: impianto adatto a migliaia di spettatori. Verifica che i LED siano verdi prima dell'evento."
+            : "Capacità del VPS: fino a ~500 spettatori simultanei il VPS da solo basta. Oltre serve la CDN: imposta l'URL qui sotto e verifica il LED verde."}
+        </span>
+      </div>
+
+      <form className="grid-2" onSubmit={save}>
+        <div className="span-2 row wrap" style={{ gap: 16, alignItems: "flex-start" }}>
+          <label className="field grow" style={{ minWidth: 260 }}>
+            <span>Nome del servizio</span>
+            <input
+              className="input"
+              value={form.brandName}
+              maxLength={40}
+              placeholder="Nome del servizio"
+              onChange={(e) => setField("brandName", e.target.value)}
+            />
+            <em className="muted">
+              Il nome che gli spettatori leggono ovunque: pagina, player, titolo del browser. Il progetto è tuo, il nome
+              lo scegli tu.
+            </em>
+          </label>
+          <div className="stack" style={{ gap: 8, minWidth: 220 }}>
+            <span className="small muted">Simbolo accanto al nome</span>
+            <div className="row" style={{ gap: 12, alignItems: "center" }}>
+              {logoUrl ? (
+                <img
+                  className="upload-preview"
+                  style={{ width: 52, height: 52, borderRadius: 14, objectFit: "contain" }}
+                  src={`${logoUrl}?v=${logoVersion}`}
+                  alt="Logo attuale"
+                />
+              ) : (
+                <span className="brand-mark" style={{ width: 52, height: 52, borderRadius: 14 }}>
+                  <svg viewBox="0 0 24 24" width={26} height={26} aria-hidden>
+                    <path d="M8 5v14l11-7z" fill="currentColor" />
+                  </svg>
+                </span>
+              )}
+              <div className="stack" style={{ gap: 6 }}>
+                <input
+                  ref={logoRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void changeLogo(file);
+                  }}
+                />
+                <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => logoRef.current?.click()}>
+                  {logoUrl ? "Cambia logo" : "Carica logo"}
+                </button>
+                {logoUrl && (
+                  <button type="button" className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => void dropLogo()}>
+                    Rimuovi
+                  </button>
+                )}
+              </div>
+            </div>
+            <em className="muted">
+              PNG quadrato consigliato (512×512). Il logo diventa anche l'icona della scheda del browser e compare
+              nell'anteprima dei link condivisi.
+            </em>
+          </div>
+        </div>
+
+        <label className="field">
+          <span className="row">{led(checks?.origin.ok ?? null)} URL pubblico</span>
+          <input className="input" value={form.publicBaseUrl} onChange={(e) => setField("publicBaseUrl", e.target.value)} />
+          <em className="muted">Il dominio della diretta, con https://. Il LED verifica che risponda dal server.</em>
+        </label>
+        <label className="field">
+          <span className="row">{led(checks?.cdnEnabled ? (checks.cdn?.ok ?? false) : null)} CDN (opzionale)</span>
+          <input
+            className="input"
+            value={form.cdnBaseUrl}
+            placeholder="https://cdn.esempio.com"
+            onChange={(e) => setField("cdnBaseUrl", e.target.value)}
+          />
+          <em className="muted">
+            Vuoto = spettatori serviti dal VPS. Con una CDN, i segmenti arrivano dall'edge e il VPS regge carichi molto
+            più grandi.
+          </em>
+        </label>
+        <label className="field">
+          <span className="row">{led(checks?.ingestTcp ?? null)} Host ingest</span>
+          <input className="input" value={form.ingestHost} onChange={(e) => setField("ingestHost", e.target.value)} />
+          <em className="muted">Può differire dal dominio pubblico (es. IP del VPS). Il LED verifica la porta RTMP.</em>
+        </label>
+        <label className="field">
+          <span>Porta ingest</span>
+          <input
+            className="input"
+            type="number"
+            min={1}
+            max={65535}
+            value={form.ingestPort}
+            onChange={(e) => setField("ingestPort", Number(e.target.value))}
+          />
+          <em className="muted">Default 1935 (RTMP).</em>
+        </label>
+
+        <div className="row-between span-2">
+          <span className="muted small">
+            In onda via: <code className="code-inline">{form.hlsBaseUrl}</code>
+          </span>
+          <button className="btn btn-primary btn-small" type="submit" disabled={busy}>
+            Salva
+          </button>
+        </div>
+      </form>
+
+      {message && <p className="ok-text small">{message}</p>}
+      {error && <p className="error-text small">{error}</p>}
     </section>
   );
 }
