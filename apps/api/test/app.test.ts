@@ -59,9 +59,17 @@ let pipeline: FakePipeline;
 async function boot(): Promise<{ app: FastifyInstance; dir: string; pipeline: FakePipeline }> {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "livecast-app-"));
   pipeline = makeFakePipeline();
+  // A minimal SPA shell, so the tests see the same HTML path production serves
+  // (link previews are built from it).
+  const webRoot = path.join(tmp, "web");
+  fs.mkdirSync(webRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(webRoot, "index.html"),
+    "<!doctype html><html><head><title>Shell</title></head><body><div id=root></div></body></html>",
+  );
   const instance = await buildApp({
     dbFile: path.join(tmp, "db.sqlite"),
-    webRoot: path.join(tmp, "missing-web"),
+    webRoot,
     pipeline,
     mediamtx: new MediaMtxClient("http://127.0.0.1:1", 100),
   });
@@ -762,6 +770,33 @@ describe("admin + public stream lifecycle", () => {
     expect(removed.statusCode).toBe(200);
     expect((await app.inject({ method: "GET", url: "/api/brand/logo" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/brand" })).json().logoUrl).toBeNull();
+  });
+
+  it("gives the shared link a preview a messaging app can read", async () => {
+    const cookie = await login();
+    const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Serata Jazz" } });
+    const stream = created.json().stream;
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    await app.inject({
+      method: "POST",
+      url: `/api/admin/streams/${stream.id}/poster`,
+      headers: { cookie, "content-type": "image/png" },
+      payload: png,
+    });
+
+    const page = await app.inject({ method: "GET", url: `/live/${stream.slug}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('property="og:title" content="Serata Jazz');
+    // A raster URL, absolute, because that is what a crawler must fetch.
+    expect(page.body).toContain(`/uploads/${stream.slug}.poster.png`);
+    expect(page.body).toContain('property="og:image"');
+    expect(page.body).toContain('name="twitter:card" content="summary_large_image"');
+
+    // Without any upload the title still previews, with no broken image tag.
+    const plain = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Solo Titolo" } });
+    const plainPage = await app.inject({ method: "GET", url: `/live/${plain.json().stream.slug}` });
+    expect(plainPage.body).toContain('property="og:title" content="Solo Titolo');
+    expect(plainPage.body).not.toContain('property="og:image"');
   });
 
   it("counts the player pages that are open, and forgets the closed ones", async () => {

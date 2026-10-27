@@ -69,6 +69,12 @@ export function Player({ slug }: { slug: string }) {
     };
   }, [slug]);
 
+  // The tab names the event and the service that is broadcasting it.
+  useEffect(() => {
+    if (!meta) return;
+    document.title = `${meta.title} · ${brand}`;
+  }, [meta?.title, brand]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The event icon replaces the site icon in the tab: when several links are
   // open, this is what tells them apart.
   useEffect(() => {
@@ -108,7 +114,11 @@ export function Player({ slug }: { slug: string }) {
         />
       </main>
       <footer className="player-footer">
-        <span className="small">{unreachable ? "Riconnessione al server…" : meta ? <BrandMark name={brand} size={26} /> : brand}</span>
+        {unreachable ? (
+          <span className="small">Riconnessione al server…</span>
+        ) : (
+          <BrandMark name={brand} size={28} />
+        )}
       </footer>
     </div>
   );

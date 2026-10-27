@@ -20,7 +20,7 @@ import { SettingsStore, type RuntimeSettings } from "./settings.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { liveRoutes } from "./routes/live.js";
-import { reconcileOrphans } from "./streams.js";
+import { getStreamBySlug, reconcileOrphans } from "./streams.js";
 import { SignalWatchdog } from "./services/watchdog.js";
 
 declare module "fastify" {
@@ -202,6 +202,62 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         }
       },
     });
+    /**
+     * Link previews are built from the raw HTML: messaging apps never run the
+     * JavaScript that would paint the event page. The shared link therefore gets
+     * Open Graph tags injected here, with the operator's own name, the event
+     * title and an image that WhatsApp can actually display (a generated SVG is
+     * not one of those, so the uploaded poster or icon is used when it exists).
+     */
+    function socialHead(slug: string): string {
+      const row = getStreamBySlug(app.db, slug);
+      if (!row) return "";
+      const settings = app.settings.get();
+      const base = settings.publicBaseUrl.replace(/\/+$/, "");
+      const escape = (value: string) =>
+        value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const title = `${row.title} · ${settings.brandName}`;
+      const description = `Diretta di ${settings.brandName}. Apri il link per ascoltare.`;
+      // A raster image is required: the poster, else the square icon, else the
+      // platform falls back to the title alone.
+      const image = row.poster_ext
+        ? `${base}/uploads/${row.slug}.poster.${row.poster_ext}`
+        : row.icon_ext
+          ? `${base}/uploads/${row.slug}.icon.${row.icon_ext}`
+          : null;
+      const tags = [
+        `<title>${escape(title)}</title>`,
+        `<meta name="description" content="${escape(description)}">`,
+        `<meta property="og:type" content="website">`,
+        `<meta property="og:site_name" content="${escape(settings.brandName)}">`,
+        `<meta property="og:title" content="${escape(title)}">`,
+        `<meta property="og:description" content="${escape(description)}">`,
+        `<meta property="og:url" content="${base}/live/${row.slug}">`,
+        image ? `<meta property="og:image" content="${escape(image)}">` : "",
+        image ? `<meta property="og:image:alt" content="${escape(row.title)}">` : "",
+        row.poster_ext ? `<meta property="og:image:width" content="1280">` : "",
+        row.poster_ext ? `<meta property="og:image:height" content="720">` : "",
+        row.icon_ext && !row.poster_ext ? `<meta property="og:image:width" content="512">` : "",
+        row.icon_ext && !row.poster_ext ? `<meta property="og:image:height" content="512">` : "",
+        `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}">`,
+        `<meta name="twitter:title" content="${escape(title)}">`,
+        `<meta name="twitter:description" content="${escape(description)}">`,
+        image ? `<meta name="twitter:image" content="${escape(image)}">` : "",
+      ];
+      return tags.filter(Boolean).join("\n    ");
+    }
+
+    /** The SPA shell with the event's own tags, for crawlers and browsers alike. */
+    function shellFor(slug: string | null): string {
+      const shell = fs.readFileSync(path.join(webRoot, "index.html"), "utf8");
+      if (!slug) return shell;
+      const head = socialHead(slug);
+      if (!head) return shell;
+      // The static <title> is replaced, not duplicated.
+      const withoutTitle = shell.replace(/<title>[^<]*<\/title>/, "");
+      return withoutTitle.replace("</head>", `    ${head}\n  </head>`);
+    }
+
     app.setNotFoundHandler((req, reply) => {
       if (req.method !== "GET" && req.method !== "HEAD") {
         return reply.code(404).send({ error: "not_found" });
@@ -215,6 +271,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         reply.header("Cache-Control", "no-store");
         return reply.sendFile("index.html");
       }
+      const liveMatch = /^live\/([a-z0-9]{10})\/?$/.exec(pathname);
       const candidate = path.join(webRoot, pathname);
       // `reply.sendFile` resolves on missing files by sending a 404, not by
       // rejecting, so existence is checked here: that is the difference between
@@ -224,6 +281,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
         return reply.sendFile(pathname);
       }
       reply.header("Cache-Control", "no-store");
+      if (liveMatch?.[1]) {
+        reply.header("content-type", "text/html; charset=utf-8");
+        return reply.send(shellFor(liveMatch[1]));
+      }
       return reply.sendFile("index.html");
     });
   } else {
