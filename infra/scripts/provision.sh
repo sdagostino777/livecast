@@ -84,12 +84,14 @@ if [ -x "${APP_DIR}/bin/mediamtx" ]; then
 else
   TMP="$(mktemp -d)"
   BASE="https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}"
-  curl -fsSL "${BASE}/mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz" -o "${TMP}/mediamtx.tar.gz"
+  ARCHIVE="mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz"
+  curl -fsSL "${BASE}/${ARCHIVE}" -o "${TMP}/${ARCHIVE}"
   # The checksum file is published next to the archive; verifying it costs one
   # line and turns "we downloaded a binary as root" into a supply-chain check.
+  # The archive keeps its release filename so the checksum lookup matches.
   curl -fsSL "${BASE}/checksums.sha256" -o "${TMP}/checksums.sha256"
   ( cd "${TMP}" && sha256sum --check --ignore-missing checksums.sha256 >/dev/null && echo ok ) || fail "checksum mismatch for ${MEDIAMTX_VERSION}"
-  tar -xzf "${TMP}/mediamtx.tar.gz" -C "${TMP}" mediamtx
+  tar -xzf "${TMP}/${ARCHIVE}" -C "${TMP}" mediamtx
   install -m 755 -o root -g root "${TMP}/mediamtx" "${APP_DIR}/bin/mediamtx"
   rm -rf "${TMP}"
   ok "installed ${APP_DIR}/bin/mediamtx"
