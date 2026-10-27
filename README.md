@@ -11,7 +11,7 @@ vendor, a domain or an organisation.
 Built as the streaming layer for the maintainers events. The driving constraint was not
 features: it was *"the transmission must not fall during the event"* — so the
 code is organised around failure, not around convenience. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break.md).
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break).
 
 ![The player — play and pause, nothing else](docs/screenshots/player.png)
 
@@ -107,8 +107,8 @@ a broadcast from the panel and press play on `/live/<slug>`.
 ![The panel while live — green LEDs per publisher, capacity banner, settings](docs/screenshots/admin.png)
 
 - **Diretta** — the only broadcast this install has. The title, the kind (video
-  or audio-only) and the event images save themselves: there is no "Salva", the
-  preview follows as you type. **● ONLINE** starts it, **■ STOP** ends it, and
+  or audio-only) and the poster save themselves: there is no "Salva", the preview
+  follows as you type. **● ONLINE** starts it, **■ STOP** ends it, and
   **Nuovo evento** opens the next one with a new link. While on air the panel
   shows the time elapsed and how many player pages are connected right now.
 - **Link della diretta** — copyable from the first moment: whoever opens it sees
@@ -205,7 +205,7 @@ capacity hint and the CDN state, so the operator never has to remember it.
 ## What holds when things break
 
 The event-day guarantees are documented as a table in
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break.md),
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break),
 and the operator runbook (go-live checklist, CDN attach, troubleshooting) is
 [`docs/RUNBOOK.md`](docs/RUNBOOK.md). Short version:
 
@@ -257,7 +257,7 @@ guides can be edited as plain HTML and re-printed without a design tool.
 
 ```bash
 pnpm typecheck        # tsc, both packages
-pnpm test             # 32 tests: FFmpeg args (video + audio), supervisor, auth, users, routes
+pnpm test             # 48 tests: FFmpeg args (video + audio), supervisor, watchdog, auth, users, routes, link previews
 pnpm build            # api → dist, web → dist
 ```
 
@@ -286,4 +286,4 @@ MIT — see [`LICENSE`](LICENSE).
 
 ---
 
-*Built by [Simone D'Agostino](https://github.com/sdagostino777) for the maintainers.*
+*Built by [Simone D'Agostino](https://github.com/sdagostino777).*
