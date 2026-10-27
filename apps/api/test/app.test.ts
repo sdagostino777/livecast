@@ -718,6 +718,52 @@ describe("admin + public stream lifecycle", () => {
     expect(publicPoster.body.startsWith("<svg")).toBe(true);
   });
 
+  it("lets the install rename itself and upload its own logo", async () => {
+    const cookie = await login();
+    const before = await app.inject({ method: "GET", url: "/api/brand" });
+    expect(before.json().logoUrl).toBeNull();
+    expect((await app.inject({ method: "GET", url: "/api/brand/logo" })).statusCode).toBe(404);
+
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/admin/brand/logo",
+      headers: { cookie, "content-type": "image/png" },
+      payload: png,
+    });
+    expect(upload.statusCode).toBe(200);
+
+    const served = await app.inject({ method: "GET", url: "/api/brand/logo" });
+    expect(served.statusCode).toBe(200);
+    expect(served.headers["content-type"]).toContain("image/png");
+
+    const renamed = await app.inject({
+      method: "PUT",
+      url: "/api/admin/settings",
+      headers: { cookie },
+      payload: { brandName: "Radio Comunale" },
+    });
+    expect(renamed.statusCode).toBe(200);
+    const brand = await app.inject({ method: "GET", url: "/api/brand" });
+    expect(brand.json().name).toBe("Radio Comunale");
+    expect(brand.json().logoUrl).toBe("/api/brand/logo");
+
+    // A logo that is not an image is refused, and the old one survives.
+    const bogus = await app.inject({
+      method: "POST",
+      url: "/api/admin/brand/logo",
+      headers: { cookie, "content-type": "image/png" },
+      payload: Buffer.from("not an image"),
+    });
+    expect(bogus.statusCode).toBe(400);
+    expect((await app.inject({ method: "GET", url: "/api/brand/logo" })).statusCode).toBe(200);
+
+    const removed = await app.inject({ method: "DELETE", url: "/api/admin/brand/logo", headers: { cookie } });
+    expect(removed.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/api/brand/logo" })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: "/api/brand" })).json().logoUrl).toBeNull();
+  });
+
   it("counts the player pages that are open, and forgets the closed ones", async () => {
     const cookie = await login();
     const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Evento contato" } });

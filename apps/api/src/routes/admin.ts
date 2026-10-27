@@ -42,7 +42,8 @@ import net from "node:net";
 import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
-import { artworkFor, posterFile } from "../artwork.js";
+import { artworkFor } from "../artwork.js";
+import { removeBrandLogo, saveBrandLogo } from "../brand.js";
 import { countViewers } from "../presence.js";
 import { iconSvg } from "../poster.js";
 import { journalLines, recentInMemory, remember } from "../services/logs.js";
@@ -657,6 +658,40 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     });
     return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
   }
+
+  // --- the install's own identity (name is in settings, logo is a file) ------
+  app.post("/api/admin/brand/logo", { bodyLimit: 2 * 1024 * 1024 }, async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    if (session.user.role !== "admin") return reply.code(403).send({ error: "forbidden" });
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) return reply.code(400).send({ error: "expected_image_bytes" });
+    const ext = imageExtension(body);
+    if (!ext) return reply.code(400).send({ error: "unsupported_image_format" });
+    saveBrandLogo(body, ext);
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "brand_logo_uploaded",
+      detail: ext,
+      ip: req.ip,
+    });
+    return { logoUrl: "/api/brand/logo" };
+  });
+
+  app.delete("/api/admin/brand/logo", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    if (session.user.role !== "admin") return reply.code(403).send({ error: "forbidden" });
+    removeBrandLogo();
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "brand_logo_removed",
+      ip: req.ip,
+    });
+    return { logoUrl: null };
+  });
 
   app.post("/api/admin/streams/:id/poster", { bodyLimit: 6 * 1024 * 1024 }, (req, reply) =>
     uploadImage(req, reply, "poster"),

@@ -1,5 +1,17 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, Checks, Me, Overview, posterSrc, Settings, StreamView, uploadStreamImage } from "../api";
+import {
+  api,
+  ApiError,
+  Checks,
+  Me,
+  Overview,
+  posterSrc,
+  removeBrandLogo,
+  Settings,
+  StreamView,
+  uploadBrandLogo,
+  uploadStreamImage,
+} from "../api";
 import { useBrand } from "../brand";
 import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
@@ -1041,13 +1053,49 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [checks, setChecks] = useState<Checks | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoVersion, setLogoVersion] = useState(0);
+  const logoRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     api
       .get<Settings>("/api/admin/settings")
       .then(setForm)
       .catch(() => setError("Impossibile leggere le impostazioni."));
+    api
+      .get<{ name: string; logoUrl: string | null }>("/api/brand")
+      .then((brand) => setLogoUrl(brand.logoUrl))
+      .catch(() => undefined);
   }, []);
+
+  async function changeLogo(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await uploadBrandLogo(file);
+      setLogoUrl(saved.logoUrl);
+      setLogoVersion((version) => version + 1);
+      notify("Logo aggiornato.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function dropLogo() {
+    setBusy(true);
+    try {
+      await removeBrandLogo();
+      setLogoUrl(null);
+      setLogoVersion((version) => version + 1);
+      notify("Logo rimosso: torna il simbolo generato.");
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -1093,6 +1141,8 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       setMessage("Impostazioni salvate.");
       notify("Impostazioni salvate.");
       document.title = saved.brandName;
+      const tabIcon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (tabIcon && logoUrl) tabIcon.href = `${logoUrl}?v=${logoVersion}`;
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -1135,6 +1185,63 @@ function SettingsPanel({ notify }: { notify: (m: string) => void }) {
       </div>
 
       <form className="grid-2" onSubmit={save}>
+        <div className="span-2 row wrap" style={{ gap: 16, alignItems: "flex-start" }}>
+          <label className="field grow" style={{ minWidth: 260 }}>
+            <span>Nome del servizio</span>
+            <input
+              className="input"
+              value={form.brandName}
+              maxLength={40}
+              onChange={(e) => setField("brandName", e.target.value)}
+            />
+            <em className="muted">
+              Il nome che gli spettatori leggono ovunque: pagina, player, titolo del browser. Il progetto è tuo, il nome
+              lo scegli tu.
+            </em>
+          </label>
+          <div className="stack" style={{ gap: 8, minWidth: 220 }}>
+            <span className="small muted">Simbolo accanto al nome</span>
+            <div className="row" style={{ gap: 12, alignItems: "center" }}>
+              {logoUrl ? (
+                <img
+                  className="upload-preview"
+                  style={{ width: 52, height: 52, borderRadius: 14, objectFit: "contain" }}
+                  src={`${logoUrl}?v=${logoVersion}`}
+                  alt="Logo attuale"
+                />
+              ) : (
+                <span className="brand-mark" style={{ width: 52, height: 52, borderRadius: 14 }}>
+                  <svg viewBox="0 0 24 24" width={26} height={26} aria-hidden>
+                    <path d="M8 5v14l11-7z" fill="currentColor" />
+                  </svg>
+                </span>
+              )}
+              <div className="stack" style={{ gap: 6 }}>
+                <input
+                  ref={logoRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (file) void changeLogo(file);
+                  }}
+                />
+                <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => logoRef.current?.click()}>
+                  {logoUrl ? "Cambia logo" : "Carica logo"}
+                </button>
+                {logoUrl && (
+                  <button type="button" className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => void dropLogo()}>
+                    Rimuovi
+                  </button>
+                )}
+              </div>
+            </div>
+            <em className="muted">PNG quadrato consigliato (512×512). Senza logo resta il simbolo generato.</em>
+          </div>
+        </div>
+
         <label className="field">
           <span className="row">{led(checks?.origin.ok ?? null)} URL pubblico</span>
           <input className="input" value={form.publicBaseUrl} onChange={(e) => setField("publicBaseUrl", e.target.value)} />

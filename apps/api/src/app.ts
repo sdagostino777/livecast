@@ -11,6 +11,7 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import path from "node:path";
+import { brandLogoExtension, brandLogoFile } from "./brand.js";
 import { config, dbFile } from "./config.js";
 import { openDb, type Db } from "./db.js";
 import { HlsPipeline, type PipelineApi } from "./services/pipeline.js";
@@ -118,7 +119,19 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   // Public branding: the login page and the player need the name before there
   // is a session, and it is not a secret.
-  app.get("/api/brand", async () => ({ name: app.settings.get().brandName }));
+  app.get("/api/brand", async () => ({
+    name: app.settings.get().brandName,
+    logoUrl: brandLogoExtension() ? "/api/brand/logo" : null,
+  }));
+
+  // The logo the operator uploaded, if any. Cached briefly: it changes rarely
+  // and it is on every page.
+  app.get("/api/brand/logo", async (_req, reply) => {
+    const logo = brandLogoFile();
+    if (!logo) return reply.code(404).send({ error: "not_found" });
+    reply.header("content-type", logo.contentType).header("cache-control", "public, max-age=60");
+    return reply.send(fs.createReadStream(logo.file));
+  });
 
   await app.register(authRoutes);
   await app.register(adminRoutes);

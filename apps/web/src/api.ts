@@ -152,6 +152,32 @@ export interface Checks {
 }
 
 /** Uploads a File's raw bytes; the server sniffs the format by magic bytes. */
+/** Uploads the install's own logo (PNG/JPEG/WebP bytes, shape checked server-side). */
+export async function uploadBrandLogo(file: File): Promise<{ logoUrl: string }> {
+  const type = file.type || (file.name.endsWith(".png") ? "image/png" : file.name.endsWith(".webp") ? "image/webp" : "image/jpeg");
+  const res = await fetch("/api/admin/brand/logo", {
+    method: "POST",
+    body: file,
+    credentials: "same-origin",
+    headers: { "content-type": type },
+  });
+  if (!res.ok) {
+    let body: { error?: string } = {};
+    try {
+      body = (await res.json()) as { error?: string };
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, body.error ?? "upload_failed");
+  }
+  return (await res.json()) as { logoUrl: string };
+}
+
+export async function removeBrandLogo(): Promise<void> {
+  const res = await fetch("/api/admin/brand/logo", { method: "DELETE", credentials: "same-origin" });
+  if (!res.ok) throw new ApiError(res.status, "remove_failed");
+}
+
 export async function uploadStreamImage(
   streamId: string,
   kind: "poster" | "icon",

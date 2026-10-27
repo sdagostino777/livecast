@@ -104,6 +104,11 @@ h2 {
   flex: none;
 }
 
+.brand-mark.uploaded {
+  background: transparent;
+  object-fit: contain;
+}
+
 .brand b {
   color: var(--brand);
 }
