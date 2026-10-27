@@ -84,7 +84,7 @@ if [ -x "${APP_DIR}/bin/mediamtx" ]; then
 else
   TMP="$(mktemp -d)"
   BASE="https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}"
-  curl -fsSL "${BASE}/mediamtx_${MEDIAMTX_VERSION#v}_linux_amd64.tar.gz" -o "${TMP}/mediamtx.tar.gz"
+  curl -fsSL "${BASE}/mediamtx_${MEDIAMTX_VERSION}_linux_amd64.tar.gz" -o "${TMP}/mediamtx.tar.gz"
   # The checksum file is published next to the archive; verifying it costs one
   # line and turns "we downloaded a binary as root" into a supply-chain check.
   curl -fsSL "${BASE}/checksums.sha256" -o "${TMP}/checksums.sha256"
