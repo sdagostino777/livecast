@@ -73,11 +73,29 @@ function wrapTitle(title: string, maxChars: number, maxLines = 3): string[] {
   return kept;
 }
 
-/** Font size and line width that fit a title of this length. */
+/** Width the poster leaves for text, in its own coordinates. */
+const TITLE_WIDTH = 1152; // 1280 minus 64px each side
+/** Average advance of a bold sans glyph, plus a margin for wide ones. */
+const CHAR_WIDTH = 0.56;
+
+/**
+ * Font size and lines for a title.
+ *
+ * One line is always preferred: an event name broken across two lines reads as
+ * a layout accident. The type shrinks until the whole name fits, and only a name
+ * too long for the artwork at a readable size is wrapped and, at the very end,
+ * clipped with an ellipsis.
+ */
 function titleFit(title: string): { fontSize: number; lines: string[] } {
-  const length = title.trim().length;
-  const plan = length <= 14 ? { fontSize: 76, maxChars: 14 } : length <= 30 ? { fontSize: 66, maxChars: 20 } : length <= 46 ? { fontSize: 58, maxChars: 24 } : { fontSize: 48, maxChars: 30 };
-  return { fontSize: plan.fontSize, lines: wrapTitle(title, plan.maxChars) };
+  const trimmed = title.trim();
+  // Em dashes and capitals take more room than the average glyph.
+  const effective = trimmed.length + (trimmed.match(/[—–]/g)?.length ?? 0) * 0.8;
+  const single = Math.min(76, Math.floor(TITLE_WIDTH / (effective * CHAR_WIDTH)));
+  if (single >= 46) return { fontSize: single, lines: [trimmed] };
+
+  const wrapped = Math.max(44, single);
+  const maxChars = Math.floor(TITLE_WIDTH / (wrapped * CHAR_WIDTH));
+  return { fontSize: wrapped, lines: wrapTitle(trimmed, maxChars) };
 }
 
 export function posterSvg(opts: { title: string; brand: string; seed: string; palette?: string | null }): string {

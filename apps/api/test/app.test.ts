@@ -705,6 +705,11 @@ describe("admin + public stream lifecycle", () => {
     for (const word of ["Congresso", "Internazionale", "2027", "Bologna"]) {
       expect(poster.body).toContain(word);
     }
+    // …and it stays on one line when the type can shrink to fit.
+    const titleNodes = [...poster.body.matchAll(/<text[^>]*>([^<]+)<\/text>/g)]
+      .map((m) => m[1]!)
+      .filter((text) => !["LIVECAST", "LIVE"].includes(text));
+    expect(titleNodes).toEqual(["Congresso Internazionale 2027 — Bologna"]);
   });
 
   it("generates poster artwork when no image was uploaded", async () => {
