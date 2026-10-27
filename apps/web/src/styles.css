@@ -1267,7 +1267,7 @@ h2 {
 .regia-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
   min-width: 220px;
   flex: 1;
@@ -1286,7 +1286,10 @@ h2 {
 
 .btn-online,
 .btn-stop {
-  min-width: 132px;
+  width: 100%;
+  min-width: 200px;
+  padding: 16px 18px;
+  font-size: 18px;
   font-weight: 750;
   letter-spacing: 0.06em;
   color: #fff;
@@ -1359,4 +1362,57 @@ h2 {
   height: 100%;
   object-fit: cover;
   z-index: 1;
+}
+
+/* --- on-air warning ---------------------------------------------------- */
+
+.banner-onair {
+  background: rgba(224, 49, 49, 0.08);
+  border: 1.5px solid rgba(224, 49, 49, 0.35);
+  color: #a01f1f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-theme="dark"] .banner-onair {
+  background: rgba(224, 49, 49, 0.14);
+  color: #ffb4b4;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 14, 24, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 100;
+}
+
+.modal {
+  width: min(520px, 100%);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+.poster-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.onair-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  background: rgba(3, 12, 24, 0.78);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  border-radius: 999px;
 }

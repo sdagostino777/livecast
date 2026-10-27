@@ -20,6 +20,7 @@ import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { liveRoutes } from "./routes/live.js";
 import { reconcileOrphans } from "./streams.js";
+import { SignalWatchdog } from "./services/watchdog.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -27,6 +28,7 @@ declare module "fastify" {
     pipeline: PipelineApi;
     mediamtx: MediaMtxClient;
     settings: SettingsStore;
+    signalWatchdog: SignalWatchdog;
   }
 }
 
@@ -61,6 +63,19 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // than let it block the next broadcast through the one-active-stream index.
   const orphans = reconcileOrphans(app.db);
   if (orphans > 0) app.log.warn({ orphans }, "ended orphaned streams left by a previous process");
+
+  // A broadcast without a publisher must not survive: the panel would claim
+  // "In onda" while viewers stare at a dead player.
+  const watchdog = new SignalWatchdog({
+    db: app.db,
+    pipeline: app.pipeline,
+    mediamtx: app.mediamtx,
+    primaryPath: config.ingestPath,
+    backupPath: config.ingestBackupPath,
+  });
+  watchdog.start();
+  app.decorate("signalWatchdog", watchdog);
+  app.addHook("onClose", async () => watchdog.stop());
 
   // Image uploads arrive as raw bytes (`fetch(url, { body: file })`), not as
   // multipart: one fewer dependency, and the panel controls what is sent.

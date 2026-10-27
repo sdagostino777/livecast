@@ -62,6 +62,7 @@ export function Admin() {
   const toastTimer = useRef<number | null>(null);
   const [pubKind, setPubKind] = useState<null | "camera" | "screen">(null);
   const [pubError, setPubError] = useState<string | null>(null);
+  const [leavePrompt, setLeavePrompt] = useState<(() => void) | null>(null);
   const pubPc = useRef<RTCPeerConnection | null>(null);
   const pubMedia = useRef<MediaStream | null>(null);
   const pubVideo = useRef<HTMLVideoElement | null>(null);
@@ -181,6 +182,23 @@ export function Admin() {
     });
   }
 
+  /** Live-updating configuration: the panel has no save button any more. */
+  async function autoSaveConfig(patch: {
+    title?: string;
+    kind?: "video" | "audio";
+    record?: boolean;
+    posterPalette?: string | null;
+  }) {
+    if (!current) return; // the first save uses the create button
+    try {
+      await api.patch(`/api/admin/streams/${current.id}`, patch);
+      if (patch.title) setTitleDraft(patch.title);
+      await refresh();
+    } catch (err) {
+      setError(friendlyError(err));
+    }
+  }
+
   async function startStream() {
     if (!current) return;
     await act(async () => {
@@ -256,6 +274,15 @@ export function Admin() {
     setPubKind(null);
   }
 
+  /** Anything that leaves the page while on air asks first. */
+  function guardLeave(action: () => void) {
+    if (!ov?.stream || (ov.stream.status !== "live" && ov.stream.status !== "starting")) {
+      action();
+      return;
+    }
+    setLeavePrompt(() => action);
+  }
+
   async function logout() {
     try {
       await api.post("/api/auth/logout");
@@ -281,7 +308,7 @@ export function Admin() {
       <header className="admin-top">
         <BrandMark name={brand} />
         <div className="admin-user">
-          <button className="icon-btn" title="Impostazioni" aria-label="Impostazioni" onClick={() => navigate("/admin/settings")}>
+          <button className="icon-btn" title="Impostazioni" aria-label="Impostazioni" onClick={() => guardLeave(() => navigate("/admin/settings"))}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="12" cy="12" r="3.2" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
@@ -297,7 +324,7 @@ export function Admin() {
                   <span>{me.username}</span>
                   <span className="pill">{me.role === "admin" ? "admin" : "conduttore"}</span>
                 </div>
-                <button className="menu-item" onClick={() => void logout()}>
+                <button className="menu-item" onClick={() => guardLeave(() => void logout())}>
                   Esci
                 </button>
               </div>
@@ -306,6 +333,12 @@ export function Admin() {
         </div>
       </header>
 
+      {onAir && (
+        <div className="banner banner-onair">
+          <span className="blink-dot" aria-hidden /> <b>Sei in onda.</b> Non chiudere né ricaricare questa pagina: la
+          trasmissione cadrebbe.
+        </div>
+      )}
       {error && <div className="banner banner-error">{error}</div>}
       {toast && <div className="banner banner-ok">{toast}</div>}
 
@@ -338,7 +371,8 @@ export function Admin() {
           busy={busy}
           titleDraft={titleDraft}
           setTitleDraft={setTitleDraft}
-          onSave={saveConfig}
+          onAutoSave={autoSaveConfig}
+          onCreate={saveConfig}
         />
 
         <hr className="sep" />
@@ -409,6 +443,33 @@ export function Admin() {
       </section>
 
       <SettingsPanel notify={notify} />
+
+      {leavePrompt && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal card">
+            <h2 style={{ marginTop: 0 }}>Uscire dalla pagina?</h2>
+            <p className="muted small">
+              La trasmissione è in corso. Se esci o ricarichi, <b>la diretta cade</b> e gli spettatori restano senza
+              segnale.
+            </p>
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              <button className="btn btn-online" onClick={() => setLeavePrompt(null)}>
+                Resta in onda
+              </button>
+              <button
+                className="btn btn-stop"
+                onClick={() => {
+                  const action = leavePrompt;
+                  setLeavePrompt(null);
+                  action();
+                }}
+              >
+                Esci comunque
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -419,14 +480,21 @@ function BroadcastConfig({
   busy,
   titleDraft,
   setTitleDraft,
-  onSave,
+  onAutoSave,
+  onCreate,
 }: {
   current: StreamView | null;
   onAir: boolean;
   busy: boolean;
   titleDraft: string;
   setTitleDraft: (value: string) => void;
-  onSave: (
+  onAutoSave: (patch: {
+    title?: string;
+    kind?: "video" | "audio";
+    record?: boolean;
+    posterPalette?: string | null;
+  }) => Promise<void>;
+  onCreate: (
     title: string,
     kind: "video" | "audio",
     record: boolean,
@@ -440,6 +508,15 @@ function BroadcastConfig({
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string | null>(null);
   const posterRef = useRef<HTMLInputElement | null>(null);
+  const saveTimer = useRef<number | null>(null);
+
+  /** Everything here saves itself: the panel has no "Salva" button. */
+  function autoSave(patch: { title?: string; kind?: "video" | "audio"; record?: boolean; posterPalette?: string | null }) {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      void onAutoSave(patch);
+    }, 600);
+  }
 
   useEffect(() => {
     if (!current) return;
@@ -451,8 +528,8 @@ function BroadcastConfig({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!titleDraft.trim()) return;
-    await onSave(titleDraft.trim(), kind, record, {
+    if (!titleDraft.trim() || current) return;
+    await onCreate(titleDraft.trim(), kind, record, {
       ...(posterFile ? { poster: posterFile } : {}),
       ...(iconFile ? { icon: iconFile } : {}),
       palette,
@@ -473,20 +550,49 @@ function BroadcastConfig({
           maxLength={120}
           autoFocus
           disabled={onAir}
-          onChange={(e) => setTitleDraft(e.target.value)}
+          onChange={(e) => {
+            setTitleDraft(e.target.value);
+            autoSave({ title: e.target.value });
+          }}
         />
         <div className="choice" role="radiogroup" aria-label="Tipo di trasmissione">
           <label>
-            <input type="radio" name="kind" checked={kind === "video"} disabled={onAir} onChange={() => setKind("video")} />
+            <input
+              type="radio"
+              name="kind"
+              checked={kind === "video"}
+              disabled={onAir}
+              onChange={() => {
+                setKind("video");
+                autoSave({ kind: "video" });
+              }}
+            />
             Video
           </label>
           <label>
-            <input type="radio" name="kind" checked={kind === "audio"} disabled={onAir} onChange={() => setKind("audio")} />
+            <input
+              type="radio"
+              name="kind"
+              checked={kind === "audio"}
+              disabled={onAir}
+              onChange={() => {
+                setKind("audio");
+                autoSave({ kind: "audio" });
+              }}
+            />
             Solo audio
           </label>
         </div>
         <label className="check">
-          <input type="checkbox" checked={record} disabled={onAir} onChange={(e) => setRecord(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={record}
+            disabled={onAir}
+            onChange={(e) => {
+              setRecord(e.target.checked);
+              autoSave({ record: e.target.checked });
+            }}
+          />
           Registra
         </label>
       </div>
@@ -504,10 +610,21 @@ function BroadcastConfig({
                 disabled={onAir}
                 className={`swatch${palette === option.value ? " active" : ""}`}
                 style={{ background: option.css }}
-                onClick={() => setPalette(option.value)}
+                onClick={() => {
+                  setPalette(option.value);
+                  autoSave({ posterPalette: option.value });
+                }}
               />
             ))}
-            <button type="button" className="btn btn-ghost btn-small" disabled={onAir} onClick={() => setPalette(null)}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-small"
+              disabled={onAir}
+              onClick={() => {
+                setPalette(null);
+                autoSave({ posterPalette: null });
+              }}
+            >
               Automatico
             </button>
           </div>
@@ -546,15 +663,28 @@ function BroadcastConfig({
 
         <div className="stack" style={{ gap: 8 }}>
           <span className="small muted">Anteprima</span>
-          <img className="thumb poster-thumb big" src={posterPreview ?? (current ? posterSrc(current) : undefined)} alt="" />
+          <div className="poster-wrap">
+            <img
+              className="thumb poster-thumb big"
+              src={posterPreview ?? (current ? posterSrc(current) : undefined)}
+              alt=""
+            />
+            {onAir && (
+              <span className="onair-badge">
+                <span className="blink-dot" aria-hidden /> IN ONDA
+              </span>
+            )}
+          </div>
           {current?.iconUrl && <img className="thumb icon-thumb" src={iconSrc(current)} alt="" />}
         </div>
 
-        <div className="stack" style={{ gap: 8 }}>
-          <button className="btn btn-primary" type="submit" disabled={busy || onAir || !titleDraft.trim()}>
-            {current ? "Salva" : "Crea diretta"}
-          </button>
-        </div>
+        {!current && (
+          <div className="stack" style={{ gap: 8 }}>
+            <button className="btn btn-primary" type="submit" disabled={busy || !titleDraft.trim()}>
+              Crea diretta
+            </button>
+          </div>
+        )}
       </div>
     </form>
   );
