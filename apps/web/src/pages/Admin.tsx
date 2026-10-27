@@ -3,7 +3,7 @@ import { api, ApiError, Checks, iconSrc, Me, Overview, posterSrc, Settings, Stre
 import { useBrand } from "../brand";
 import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
-import { copyToClipboard, formatDate, navigate } from "../router";
+import { copyToClipboard, navigate } from "../router";
 
 function friendlyError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -12,10 +12,8 @@ function friendlyError(err: unknown): string {
         return "Sessione scaduta: accedi di nuovo.";
       case 403:
         return "Operazione riservata all'amministratore.";
-      case 404:
-        return "Elemento non trovato.";
       case 409:
-        return "Operazione non possibile: c'è già una diretta attiva.";
+        return "Operazione non possibile mentre la diretta è in onda.";
       case 413:
         return "Immagine troppo grande (max 6 MB).";
       case 429:
@@ -27,16 +25,11 @@ function friendlyError(err: unknown): string {
   return "Impossibile contattare il server.";
 }
 
-function kindLabel(kind: "video" | "audio"): string {
-  return kind === "audio" ? "Solo audio" : "Video";
-}
-
 function statusLabel(ov: Overview | null): string {
-  if (!ov) return "…";
-  if (!ov.stream) return "Offline";
+  if (!ov?.stream) return "Pronta";
   if (ov.stream.status === "starting") return ov.ingest.ready ? "Preparazione…" : "In attesa del segnale";
   if (ov.stream.status === "live") return "In onda";
-  return "Terminata";
+  return "Pronta";
 }
 
 function initials(name: string): string {
@@ -48,20 +41,24 @@ function initials(name: string): string {
     .join("");
 }
 
+const PALETTES: Array<{ value: string; label: string; css: string }> = [
+  { value: "blue", label: "Blu", css: "linear-gradient(135deg,#0f3559,#2a6cb6)" },
+  { value: "teal", label: "Petrolio", css: "linear-gradient(135deg,#0b3b4a,#1d7a8c)" },
+  { value: "indigo", label: "Indaco", css: "linear-gradient(135deg,#1e1a4d,#4f46a5)" },
+  { value: "slate", label: "Ardesia", css: "linear-gradient(135deg,#12212e,#3f6076)" },
+  { value: "plum", label: "Prugna", css: "linear-gradient(135deg,#3a1f3d,#8d4a63)" },
+];
+
 export function Admin() {
   const brand = useBrand();
   const [me, setMe] = useState<Me["user"] | null>(null);
   const [ov, setOv] = useState<Overview | null>(null);
-  const [streams, setStreams] = useState<StreamView[]>([]);
+  const [current, setCurrent] = useState<StreamView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
-  const [posterTarget, setPosterTarget] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const posterInput = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<number | null>(null);
   const [pubKind, setPubKind] = useState<null | "camera" | "screen">(null);
   const [pubError, setPubError] = useState<string | null>(null);
@@ -82,11 +79,17 @@ export function Admin() {
         api.get<{ streams: StreamView[] }>("/api/admin/streams"),
       ]);
       setOv(overview);
-      setStreams(streamList.streams);
+      const single = overview.stream ?? streamList.streams[0] ?? null;
+      setCurrent(single);
+      setTitleDraft((draft) => (draft === "" && single ? single.title : draft));
       setError(null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         navigate("/login", true);
+        return;
+      }
+      if (err instanceof ApiError && err.status === 403) {
+        setError("Sessione valida ma la password deve essere cambiata: ricarica la pagina.");
         return;
       }
       setError(friendlyError(err));
@@ -100,7 +103,7 @@ export function Admin() {
         const who = await api.get<Me>("/api/auth/me");
         if (!alive) return;
         setMe(who.user);
-        await refresh();
+        if (!who.user.mustChangePassword) await refresh();
       } catch {
         if (alive) navigate("/login", true);
       }
@@ -111,7 +114,7 @@ export function Admin() {
   }, [refresh]);
 
   useEffect(() => {
-    if (!me) return;
+    if (!me?.mustChangePassword) return;
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [me, refresh]);
@@ -123,8 +126,6 @@ export function Admin() {
     return () => window.removeEventListener("click", close);
   }, [menuOpen]);
 
-  // Publishing from the browser lives in this page: a reload ends the stream.
-  // The browser is asked to confirm, and the UI says so in plain words.
   useEffect(() => {
     if (!pubKind) return;
     const guard = (event: BeforeUnloadEvent) => {
@@ -139,6 +140,9 @@ export function Admin() {
     if (pubVideo.current && pubMedia.current) pubVideo.current.srcObject = pubMedia.current;
   }, [pubKind]);
 
+  const active = ov?.stream ?? null;
+  const onAir = Boolean(active);
+
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     setError(null);
@@ -152,64 +156,47 @@ export function Admin() {
     }
   }
 
-  /**
-   * Creating a broadcast never starts it: the operator fills title, kind and
-   * the event images, checks the result, and only presses "Vai in onda" from
-   * the list when everything is ready. Starting is one click, not a side
-   * effect of creating.
-   */
-  async function createDraft(
+  /** Saves the configuration: creates the broadcast the first time, patches later. */
+  async function saveConfig(
     title: string,
     kind: "video" | "audio",
     record: boolean,
     files: { poster?: File; icon?: File; palette?: string | null },
   ) {
     await act(async () => {
-      const created = await api.post<{ stream: StreamView }>("/api/admin/streams", { title, kind, record });
-      if (files.palette) {
-        await api.patch(`/api/admin/streams/${created.stream.id}`, { posterPalette: files.palette });
+      let streamId = current?.id ?? null;
+      if (!streamId) {
+        const created = await api.post<{ stream: StreamView }>("/api/admin/streams", { title, kind, record });
+        streamId = created.stream.id;
+      } else {
+        await api.patch(`/api/admin/streams/${streamId}`, { title, kind, record });
       }
-      if (files.poster) await uploadStreamImage(created.stream.id, "poster", files.poster);
-      if (files.icon) await uploadStreamImage(created.stream.id, "icon", files.icon);
-      notify("Diretta creata. Collega camera o schermo, poi premi ● ONLINE.");
-    });
-    setCreating(false);
-  }
-
-  async function startStream(id: string) {
-    await act(async () => {
-      await api.post(`/api/admin/streams/${id}/start`);
+      if (files.palette !== undefined) {
+        await api.patch(`/api/admin/streams/${streamId}`, { posterPalette: files.palette });
+      }
+      if (files.poster) await uploadStreamImage(streamId, "poster", files.poster);
+      if (files.icon) await uploadStreamImage(streamId, "icon", files.icon);
+      notify("Diretta salvata.");
+      setTitleDraft(title);
     });
   }
 
-  async function stopStream(id: string) {
+  async function startStream() {
+    if (!current) return;
     await act(async () => {
-      await api.post(`/api/admin/streams/${id}/stop`);
+      await api.post(`/api/admin/streams/${current.id}/start`);
+      notify("In onda.");
+    });
+  }
+
+  async function stopStream() {
+    if (!current) return;
+    await act(async () => {
+      await api.post(`/api/admin/streams/${current.id}/stop`);
       notify("Diretta terminata.");
     });
   }
 
-  async function deleteStream(id: string) {
-    if (!window.confirm("Eliminare questa diretta dai registri del pannello?")) return;
-    await act(async () => {
-      await api.del(`/api/admin/streams/${id}`);
-      notify("Diretta eliminata.");
-    });
-  }
-
-  async function patchTitle(streamId: string, title: string) {
-    await act(async () => {
-      await api.patch(`/api/admin/streams/${streamId}`, { title });
-      setEditingTitle(false);
-      notify("Titolo aggiornato.");
-    });
-  }
-
-  /**
-   * Connects the camera or screen to the media server. This is configuration,
-   * not transmission: the broadcast stays a draft and nobody sees it until the
-   * operator presses "Vai in onda".
-   */
   async function publishFromBrowser(kind: "camera" | "screen") {
     setPubError(null);
     setBusy(true);
@@ -231,14 +218,9 @@ export function Admin() {
       media.getTracks().forEach((track) => pc.addTrack(track, media));
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      // WHIP (WebRTC) does not accept user/pass query parameters: MediaMTX
-      // authenticates them with HTTP Basic auth, and only then validates the SDP.
       const res = await fetch("/live/whip", {
         method: "POST",
-        headers: {
-          "content-type": "application/sdp",
-          authorization: `Basic ${btoa(`${user}:${pass}`)}`,
-        },
+        headers: { "content-type": "application/sdp", authorization: `Basic ${btoa(`${user}:${pass}`)}` },
         body: offer.sdp,
       });
       if (!res.ok) throw new Error(`WHIP ${res.status}`);
@@ -256,15 +238,11 @@ export function Admin() {
         });
       });
       setPubKind(kind);
-      notify("Camera collegata. Premi «Vai in onda» quando è tutto pronto.");
+      notify("Dispositivo collegato. Premi ● ONLINE.");
       await refresh();
-    } catch (err) {
+    } catch {
       stopPublishing();
-      setPubError(
-        err instanceof Error && err.message === "timeout"
-          ? "Connessione WebRTC non riuscita (controlla la porta UDP 8189 sul server)."
-          : "Impossibile avviare la pubblicazione dal browser.",
-      );
+      setPubError("Impossibile collegare il dispositivo (camera/schermo).");
     } finally {
       setBusy(false);
     }
@@ -278,24 +256,12 @@ export function Admin() {
     setPubKind(null);
   }
 
-  async function uploadPoster(streamId: string, file: File) {
-    await act(async () => {
-      await uploadStreamImage(streamId, "poster", file);
-      notify("Immagine evento aggiornata.");
-    });
-  }
-
   async function logout() {
     try {
       await api.post("/api/auth/logout");
     } finally {
       navigate("/login", true);
     }
-  }
-
-  function pickPoster(streamId: string) {
-    setPosterTarget(streamId);
-    posterInput.current?.click();
   }
 
   if (!me) {
@@ -310,40 +276,17 @@ export function Admin() {
     return <ForcePasswordChange username={me.username} isAdmin={me.role === "admin"} />;
   }
 
-  const active = ov?.stream ?? null;
-  // The dashboard always shows the most recent broadcast — live, draft or
-  // ended — because that is the one an operator is preparing or has just run.
-  const current = active ?? streams[0] ?? null;
-
   return (
     <div className="admin">
-      <input
-        ref={posterInput}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        hidden
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file && posterTarget) void uploadPoster(posterTarget, file);
-          event.target.value = "";
-        }}
-      />
-
       <header className="admin-top">
         <BrandMark name={brand} />
         <div className="admin-user">
-          <button
-            className="icon-btn"
-            title="Impostazioni"
-            aria-label="Impostazioni"
-            onClick={() => navigate("/admin/settings")}
-          >
+          <button className="icon-btn" title="Impostazioni" aria-label="Impostazioni" onClick={() => navigate("/admin/settings")}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
               <circle cx="12" cy="12" r="3.2" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
             </svg>
           </button>
-
           <div className="avatar-menu" onClick={(event) => event.stopPropagation()}>
             <button className="avatar" onClick={() => setMenuOpen((open) => !open)} aria-label="Menu utente">
               {initials(me.username)}
@@ -369,235 +312,89 @@ export function Admin() {
       <section className="card">
         <div className="card-head">
           <h2>Diretta</h2>
-          <span className={`pill ${active ? (ov?.stream?.status ?? "") : current ? "draft" : "off"}`}>
-            {active ? statusLabel(ov) : current ? (current.status === "draft" ? "Bozza" : "Terminata") : "Offline"}
-          </span>
+          <span className={`pill ${active ? active.status : "off"}`}>{statusLabel(ov)}</span>
         </div>
 
-        {current ? (
-          <div className="stack">
-            <div className="row-between">
-              <div className="row" style={{ alignItems: "flex-start", gap: 18 }}>
-                <img className="thumb poster-thumb big" src={posterSrc(current)} alt="" />
-                <div>
-                  {editingTitle ? (
-                    <form
-                      className="row wrap"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void patchTitle(current.id, titleDraft);
-                      }}
-                    >
-                      <input
-                        className="input"
-                        value={titleDraft}
-                        maxLength={120}
-                        autoFocus
-                        onChange={(e) => setTitleDraft(e.target.value)}
-                      />
-                      <button className="btn btn-primary btn-small" type="submit" disabled={busy || !titleDraft.trim()}>
-                        Salva
-                      </button>
-                      <button className="btn btn-ghost btn-small" type="button" onClick={() => setEditingTitle(false)}>
-                        Annulla
-                      </button>
-                    </form>
-                  ) : (
-                    <>
-                      <p className="stream-title">{current.title}</p>
-                      <p className="muted small mono">
-                        {current.slug} · {kindLabel(current.kind)}
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
+        <BroadcastConfig
+          current={current}
+          onAir={onAir}
+          busy={busy}
+          titleDraft={titleDraft}
+          setTitleDraft={setTitleDraft}
+          onSave={saveConfig}
+        />
+
+        {current && (
+          <p className="row wrap" style={{ marginTop: 12 }}>
+            {current.status !== "draft" && (
+              <>
+                <button
+                  className="btn btn-ghost btn-small"
+                  onClick={() => void copyToClipboard(current.pageUrl).then(() => notify("Link copiato."))}
+                >
+                  Copia link della diretta
+                </button>
+                <span className="muted small mono ellipsis">{current.pageUrl}</span>
+              </>
+            )}
+          </p>
+        )}
+
+        <hr className="sep" />
+
+        <div className="regia">
+          {pubKind ? (
+            <video ref={pubVideo} autoPlay muted playsInline className="regia-preview" />
+          ) : (
+            <div className="regia-preview empty">
+              <span className="small">Anteprima non attiva</span>
+            </div>
+          )}
+          <div className="regia-actions">
+            <button
+              className="btn btn-online"
+              disabled={busy || onAir || !(pubKind !== null || ov?.ingest.ready) || !current}
+              onClick={() => void startStream()}
+              title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
+            >
+              ● ONLINE
+            </button>
+            <button className="btn btn-stop" disabled={busy || !onAir} onClick={() => void stopStream()} title="Ferma la diretta">
+              ■ STOP
+            </button>
+
+            <div className="sep" style={{ margin: "10px 0" }} />
+
+            {pubKind === null ? (
               <div className="row wrap">
-                <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => setCreating((v) => !v)}>
-                  {creating ? "Chiudi" : "＋ Nuova diretta"}
+                <button className="btn btn-ghost btn-small" disabled={busy || !current} onClick={() => void publishFromBrowser("camera")}>
+                  Collega camera
                 </button>
-                <button
-                  className="btn btn-ghost btn-small"
-                  disabled={busy || Boolean(active)}
-                  title={active ? "In onda: l'immagine non è modificabile" : undefined}
-                  onClick={() => pickPoster(current.id)}
-                >
-                  {current.posterUrl ? "Cambia immagine" : "Carica immagine"}
+                <button className="btn btn-ghost btn-small" disabled={busy || !current} onClick={() => void publishFromBrowser("screen")}>
+                  Collega schermo
                 </button>
-                <button
-                  className="btn btn-ghost btn-small"
-                  disabled={busy || Boolean(active)}
-                  title={active ? "In onda: il titolo non è modificabile" : undefined}
-                  onClick={() => {
-                    setTitleDraft(current.title);
-                    setEditingTitle(true);
-                  }}
-                >
-                  Modifica
-                </button>
-                {current.status !== "draft" && (
-                  <button
-                    className="btn btn-ghost btn-small"
-                    onClick={() => void copyToClipboard(current.pageUrl).then(() => notify("Link copiato."))}
-                  >
-                    Copia link
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: 8 }}>
+                <span className="small">
+                  {pubKind === "camera" ? "Camera" : "Schermo"} collegato — <b>{onAir ? "in onda" : "anteprima"}</b>
+                  {!onAir && ": nessuno ti vede finché non premi ● ONLINE"}
+                </span>
+                <div>
+                  <button className="btn btn-ghost btn-small" disabled={busy} onClick={stopPublishing}>
+                    Scollega
                   </button>
-                )}
-              </div>
-            </div>
-
-            <div className="regia">
-              {pubKind ? (
-                <video ref={pubVideo} autoPlay muted playsInline className="regia-preview" />
-              ) : (
-                <div className="regia-preview empty">
-                  <span className="small">Anteprima non attiva</span>
                 </div>
-              )}
-
-              <div className="regia-actions">
-                <button
-                  className="btn btn-online"
-                  disabled={busy || Boolean(active) || !(pubKind !== null || ov?.ingest.ready)}
-                  onClick={() => void startStream(current.id)}
-                  title={pubKind !== null || ov?.ingest.ready ? "Manda in onda" : "Collega prima camera o schermo"}
-                >
-                  ● ONLINE
-                </button>
-                <button
-                  className="btn btn-stop"
-                  disabled={busy || !active}
-                  onClick={() => void stopStream(current.id)}
-                  title="Ferma la diretta"
-                >
-                  ■ STOP
-                </button>
-
-                <div className="sep" style={{ margin: "10px 0" }} />
-
-                {pubKind === null ? (
-                  <div className="row wrap">
-                    <button
-                      className="btn btn-ghost btn-small"
-                      disabled={busy}
-                      onClick={() => void publishFromBrowser("camera")}
-                    >
-                      Collega camera
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-small"
-                      disabled={busy}
-                      onClick={() => void publishFromBrowser("screen")}
-                    >
-                      Collega schermo
-                    </button>
-                  </div>
-                ) : (
-                  <div className="stack" style={{ gap: 8 }}>
-                    <span className="small">
-                      {pubKind === "camera" ? "Camera" : "Schermo"} collegato — <b>{active ? "in onda" : "anteprima"}</b>
-                      {!active && ": nessuno ti vede finché non premi ● ONLINE"}
-                    </span>
-                    <div>
-                      <button className="btn btn-ghost btn-small" disabled={busy} onClick={stopPublishing}>
-                        Scollega
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <p className="muted small" style={{ margin: 0 }}>
-                  La pagina deve restare aperta durante la trasmissione: se la ricarichi, la diretta si interrompe.
-                </p>
-                {pubError && <p className="error-text small">{pubError}</p>}
               </div>
-            </div>
-
-            {active && <ObsPanel ov={ov} />}
+            )}
+            <p className="muted small" style={{ margin: 0 }}>
+              La pagina deve restare aperta durante la trasmissione: se la ricarichi, la diretta si interrompe.
+            </p>
+            {pubError && <p className="error-text small">{pubError}</p>}
           </div>
-        ) : (
-          <p className="muted small">Nessuna diretta. Prepara la prossima qui sotto.</p>
-        )}
-
-        {(!current || creating) && <hr className="sep" />}
-        {(!current || creating) && <NewStreamForm disabled={busy} onCreate={createDraft} />}
-      </section>
-
-      <section className="card">
-        <div className="card-head">
-          <h2>Nuova diretta</h2>
-          <span className="muted small">titolo, tipo e immagini — poi si manda in onda</span>
         </div>
-        <NewStreamForm disabled={busy} onCreate={createDraft} />
-      </section>
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Dirette</h2>
-          <span className="muted small">{streams.length}</span>
-        </div>
-        {streams.length === 0 ? (
-          <p className="muted small">Nessuna diretta creata.</p>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th aria-label="immagine" />
-                <th>Titolo</th>
-                <th>Tipo</th>
-                <th>Stato</th>
-                <th>Creata</th>
-                <th aria-label="azioni" />
-              </tr>
-            </thead>
-            <tbody>
-              {streams.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <img className="thumb icon-thumb" src={iconSrc(s)} alt="" />
-                  </td>
-                  <td>
-                    <span className="stream-title small">{s.title}</span>
-                    <br />
-                    <span className="muted small mono">{s.slug}</span>
-                  </td>
-                  <td className="small">{kindLabel(s.kind)}</td>
-                  <td>
-                    <span className={`pill ${s.status}`}>
-                      {s.status === "live" ? "In onda" : s.status === "starting" ? "Avvio" : s.status === "ended" ? "Terminata" : "Bozza"}
-                    </span>
-                  </td>
-                  <td className="muted small">{formatDate(s.createdAt)}</td>
-                  <td className="cell-actions">
-                    <button
-                      className="btn btn-ghost btn-small"
-                      disabled={busy || s.status === "live" || s.status === "starting"}
-                      onClick={() => pickPoster(s.id)}
-                    >
-                      Immagine
-                    </button>
-                    {!active && (s.status === "draft" || s.status === "ended") && (
-                      <button className="btn btn-primary btn-small" disabled={busy} onClick={() => void startStream(s.id)}>
-                        Vai in onda
-                      </button>
-                    )}
-                    <button
-                      className="btn btn-ghost btn-small"
-                      onClick={() => void copyToClipboard(`${location.origin}/live/${s.slug}`).then(() => notify("Link copiato."))}
-                    >
-                      Link
-                    </button>
-                    {s.status !== "live" && s.status !== "starting" && (
-                      <button className="btn btn-ghost btn-small danger" disabled={busy} onClick={() => void deleteStream(s.id)}>
-                        Elimina
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {onAir && <ExternalEncoderPanel ov={ov} />}
       </section>
 
       <SettingsPanel notify={notify} />
@@ -605,60 +402,54 @@ export function Admin() {
   );
 }
 
-const FORM_PALETTES: Array<{ value: string; label: string; css: string }> = [
-  { value: "blue", label: "Blu", css: "linear-gradient(135deg,#0f3559,#2a6cb6)" },
-  { value: "teal", label: "Petrolio", css: "linear-gradient(135deg,#0b3b4a,#1d7a8c)" },
-  { value: "indigo", label: "Indaco", css: "linear-gradient(135deg,#1e1a4d,#4f46a5)" },
-  { value: "slate", label: "Ardesia", css: "linear-gradient(135deg,#12212e,#3f6076)" },
-  { value: "plum", label: "Prugna", css: "linear-gradient(135deg,#3a1f3d,#8d4a63)" },
-];
-
-function NewStreamForm({
-  disabled,
-  onCreate,
+function BroadcastConfig({
+  current,
+  onAir,
+  busy,
+  titleDraft,
+  setTitleDraft,
+  onSave,
 }: {
-  disabled: boolean;
-  onCreate: (
+  current: StreamView | null;
+  onAir: boolean;
+  busy: boolean;
+  titleDraft: string;
+  setTitleDraft: (value: string) => void;
+  onSave: (
     title: string,
     kind: "video" | "audio",
     record: boolean,
     files: { poster?: File; icon?: File; palette?: string | null },
   ) => Promise<void>;
 }) {
-  const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"video" | "audio">("video");
   const [record, setRecord] = useState(false);
-  const [formPalette, setFormPalette] = useState<string | null>(null);
-  const [poster, setPoster] = useState<File | null>(null);
-  const [icon, setIcon] = useState<File | null>(null);
+  const [palette, setPalette] = useState<string | null>(null);
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [iconFile, setIconFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string | null>(null);
-  const [iconPreview, setIconPreview] = useState<string | null>(null);
   const posterRef = useRef<HTMLInputElement | null>(null);
-  const iconRef = useRef<HTMLInputElement | null>(null);
 
-  function pickPoster(file: File | null) {
-    setPoster(file);
-    if (posterPreview) URL.revokeObjectURL(posterPreview);
-    setPosterPreview(file ? URL.createObjectURL(file) : null);
-  }
-  function pickIcon(file: File | null) {
-    setIcon(file);
-    if (iconPreview) URL.revokeObjectURL(iconPreview);
-    setIconPreview(file ? URL.createObjectURL(file) : null);
-  }
+  useEffect(() => {
+    if (!current) return;
+    setKind(current.kind);
+    setRecord(current.record);
+    setPalette(current.posterPalette);
+    setTitleDraft(current.title);
+  }, [current?.id, current?.kind, current?.record, current?.posterPalette]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!title.trim()) return;
-    await onCreate(title.trim(), kind, record, {
-      ...(poster ? { poster } : {}),
-      ...(icon ? { icon } : {}),
-      palette: formPalette,
+    if (!titleDraft.trim()) return;
+    await onSave(titleDraft.trim(), kind, record, {
+      ...(posterFile ? { poster: posterFile } : {}),
+      ...(iconFile ? { icon: iconFile } : {}),
+      palette,
     });
-    setTitle("");
-    setRecord(false);
-    pickPoster(null);
-    pickIcon(null);
+    setPosterFile(null);
+    setIconFile(null);
+    if (posterPreview) URL.revokeObjectURL(posterPreview);
+    setPosterPreview(null);
   }
 
   return (
@@ -667,95 +458,90 @@ function NewStreamForm({
         <input
           className="input grow"
           placeholder="Titolo — es. Congresso Regionale / Evento semestrale"
-          value={title}
+          value={titleDraft}
           maxLength={120}
           autoFocus
-          onChange={(e) => setTitle(e.target.value)}
+          disabled={onAir}
+          onChange={(e) => setTitleDraft(e.target.value)}
         />
         <div className="choice" role="radiogroup" aria-label="Tipo di trasmissione">
           <label>
-            <input type="radio" name="kind" checked={kind === "video"} onChange={() => setKind("video")} />
+            <input type="radio" name="kind" checked={kind === "video"} disabled={onAir} onChange={() => setKind("video")} />
             Video
           </label>
           <label>
-            <input type="radio" name="kind" checked={kind === "audio"} onChange={() => setKind("audio")} />
+            <input type="radio" name="kind" checked={kind === "audio"} disabled={onAir} onChange={() => setKind("audio")} />
             Solo audio
           </label>
         </div>
         <label className="check">
-          <input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} />
+          <input type="checkbox" checked={record} disabled={onAir} onChange={(e) => setRecord(e.target.checked)} />
           Registra
         </label>
       </div>
 
-      <div className="row wrap" style={{ alignItems: "flex-end" }}>
-        <div className="stack" style={{ gap: 8, flex: 1, minWidth: 220 }}>
-          <span className="small muted">Sfondo del titolo (se non carichi un&#39;immagine)</span>
+      <div className="row wrap" style={{ alignItems: "flex-start" }}>
+        <div className="stack" style={{ gap: 8, flex: 1, minWidth: 240 }}>
+          <span className="small muted">Sfondo del titolo (se non carichi un'immagine)</span>
           <div className="row wrap">
-            {FORM_PALETTES.map((palette) => (
+            {PALETTES.map((option) => (
               <button
-                key={palette.value}
+                key={option.value}
                 type="button"
-                title={palette.label}
-                aria-label={palette.label}
-                className={`swatch${formPalette === palette.value ? " active" : ""}`}
-                style={{ background: palette.css }}
-                onClick={() => setFormPalette(palette.value)}
+                title={option.label}
+                aria-label={option.label}
+                disabled={onAir}
+                className={`swatch${palette === option.value ? " active" : ""}`}
+                style={{ background: option.css }}
+                onClick={() => setPalette(option.value)}
               />
             ))}
-            <button
-              type="button"
-              className="btn btn-ghost btn-small"
-              onClick={() => setFormPalette(null)}
-              title="Sceglie la palette dal link della diretta"
-            >
+            <button type="button" className="btn btn-ghost btn-small" disabled={onAir} onClick={() => setPalette(null)}>
               Automatico
             </button>
           </div>
-        </div>
-
-        <div className="stack" style={{ gap: 8, flex: 1, minWidth: 220 }}>
-          <span className="small muted">Immagine evento (16:9) — visibile prima del play</span>
-          {posterPreview ? (
-            <img className="thumb poster-thumb" src={posterPreview} alt="Anteprima poster" style={{ width: 160, height: 90 }} />
-          ) : (
-            <span className="thumb poster-thumb placeholder" aria-hidden style={{ width: 160, height: 90 }} />
-          )}
-          <input
-            ref={posterRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            hidden
-            onChange={(event) => pickPoster(event.target.files?.[0] ?? null)}
-          />
-          <button className="btn btn-ghost btn-small" type="button" onClick={() => posterRef.current?.click()}>
-            {poster ? "Cambia immagine" : "Scegli immagine"}
-          </button>
-        </div>
-
-        <div className="stack" style={{ gap: 8 }}>
-          <span className="small muted">Icona (quadrata) — elenchi</span>
-          {iconPreview ? (
-            <img className="thumb icon-thumb" src={iconPreview} alt="Anteprima icona" />
-          ) : (
-            <span className="thumb icon-thumb placeholder" aria-hidden />
-          )}
-          <input
-            ref={iconRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            hidden
-            onChange={(event) => pickIcon(event.target.files?.[0] ?? null)}
-          />
-          <button className="btn btn-ghost btn-small" type="button" onClick={() => iconRef.current?.click()}>
-            {icon ? "Cambia icona" : "Scegli icona"}
-          </button>
+          <span className="small muted">oppure carica un'immagine: sostituisce lo sfondo</span>
+          <div className="row wrap">
+            <input
+              ref={posterRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                setPosterFile(file);
+                if (posterPreview) URL.revokeObjectURL(posterPreview);
+                setPosterPreview(file ? URL.createObjectURL(file) : null);
+              }}
+            />
+            <button type="button" className="btn btn-ghost btn-small" disabled={onAir} onClick={() => posterRef.current?.click()}>
+              {posterFile || current?.posterUrl ? "Cambia immagine" : "Carica immagine"}
+            </button>
+            <label className="btn btn-ghost btn-small" style={{ cursor: onAir ? "not-allowed" : "pointer" }}>
+              {current?.iconUrl ? "Cambia icona" : "Carica icona"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                disabled={onAir}
+                onChange={(event) => {
+                  setIconFile(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          </div>
         </div>
 
         <div className="stack" style={{ gap: 8 }}>
-          <span className="small muted">Le immagini sono opzionali ora, modificabili dopo</span>
-          <button className="btn btn-primary" type="submit" disabled={disabled || !title.trim()}>
-            Crea
+          <span className="small muted">Anteprima</span>
+          <img className="thumb poster-thumb big" src={posterPreview ?? (current ? posterSrc(current) : undefined)} alt="" />
+          {current?.iconUrl && <img className="thumb icon-thumb" src={iconSrc(current)} alt="" />}
+        </div>
+
+        <div className="stack" style={{ gap: 8 }}>
+          <button className="btn btn-primary" type="submit" disabled={busy || onAir || !titleDraft.trim()}>
+            {current ? "Salva" : "Crea diretta"}
           </button>
         </div>
       </div>
@@ -763,82 +549,53 @@ function NewStreamForm({
   );
 }
 
-function ObsPanel({ ov }: { ov: Overview | null }) {
-  const [revealed, setRevealed] = useState<{ server: string; backupServer?: string; streamKey: string } | null>(null);
+function ExternalEncoderPanel({ ov }: { ov: Overview | null }) {
+  const [revealed, setRevealed] = useState<{ server: string; backupServer?: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!ov) return null;
-
-  async function reveal() {
-    setBusy(true);
-    setError(null);
-    try {
-      setRevealed(await api.get<{ server: string; backupServer?: string; streamKey: string }>("/api/admin/ingest"));
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const using = ov.ingest.currentInput === "backup" ? "backup" : "principale";
-
   return (
     <div className="obs">
       <div className="obs-head">
         <span className={`dot ${ov.ingest.ready ? "on" : "off"}`} aria-hidden />
-        <span className="small">Encoder principale: {ov.ingest.ready ? "collegato" : "non collegato"}</span>
-      </div>
-      <div className="obs-head">
+        <span className="small">Dispositivo/encoder collegato: {ov.ingest.ready ? "sì" : "no"}</span>
         <span className={`dot ${ov.ingest.backupReady ? "on" : "off"}`} aria-hidden />
-        <span className="small">Encoder backup: {ov.ingest.backupReady ? "collegato" : "non collegato"}</span>
+        <span className="small">backup: {ov.ingest.backupReady ? "sì" : "no"}</span>
       </div>
-      {!ov.ingest.reachable && <span className="muted small">(server media non raggiungibile)</span>}
-      <p className="muted small">
-        In uso: <b>{ov.ingest.currentInput ? using : "—"}</b>. Se l'encoder principale si interrompe, la regia ripassa
-        da sola sul backup in pochi secondi.
+      <p className="small" style={{ margin: 0 }}>
+        Vuoi usare un programma esterno invece della camera del browser? Incolla l'URL completo nel campo Server (chiave
+        di trasmissione vuota).
       </p>
-
-      <p className="small">
-        Da un programma esterno: incolla l'<b>URL completo</b> (pulsante sotto) nel campo Server / Indirizzo e lascia
-        vuota la chiave di trasmissione.
-      </p>
-      <p className="muted small mono ellipsis">Principale: {ov.ingest.server}</p>
-      <p className="muted small mono ellipsis">Backup: {ov.ingest.backupServer}</p>
-
       {revealed ? (
         <>
-          <p className="muted small">URL completo con credenziali — principale (encoder esterno):</p>
           <div className="code-row">
             <code className="code">{revealed.server}</code>
             <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.server)}>
               Copia
             </button>
           </div>
-          {revealed.backupServer && (
-            <>
-              <p className="muted small">Backup (per un secondo encoder, se lo usi):</p>
-              <div className="code-row">
-                <code className="code">{revealed.backupServer}</code>
-                <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(revealed.backupServer!)}>
-                  Copia
-                </button>
-              </div>
-            </>
-          )}
           <button className="btn btn-ghost btn-small" onClick={() => setRevealed(null)}>
             Nascondi
           </button>
         </>
       ) : (
-        <button className="btn btn-ghost btn-small" disabled={busy} onClick={reveal}>
+        <button
+          className="btn btn-ghost btn-small"
+          disabled={busy}
+          onClick={() =>
+            void (async () => {
+              setBusy(true);
+              try {
+                setRevealed(await api.get<{ server: string; backupServer?: string }>("/api/admin/ingest"));
+              } finally {
+                setBusy(false);
+              }
+            })()
+          }
+        >
           Mostra credenziali
         </button>
       )}
-
-      {error && <p className="error-text small">{error}</p>}
-      {ov.pipeline.lastError && <p className="muted small mono ellipsis">{ov.pipeline.lastError}</p>}
     </div>
   );
 }

@@ -329,6 +329,24 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!session) return reply;
     const parsed = safeParse(CreateStreamBody, req.body);
     if (!parsed.ok) return reply.code(400).send({ error: "invalid_request" });
+    // One install = one broadcast: creating a new one replaces the previous
+    // configuration (and its images) instead of piling up a list.
+    const existing = app.db.prepare("SELECT id, slug, status FROM streams").all() as Array<{ id: string; slug: string; status: string }>;
+    if (existing.some((row) => row.status === "starting" || row.status === "live")) {
+      return reply.code(409).send({ error: "stream_active" });
+    }
+    for (const old of existing) {
+      for (const kind of ["poster", "icon"] as const) {
+        for (const ext of ["jpg", "png", "webp"]) {
+          try {
+            fs.unlinkSync(path.join(uploadsDir(), `${old.slug}.${kind}.${ext}`));
+          } catch {
+            /* not present */
+          }
+        }
+      }
+      deleteStreamRow(app.db, old.id);
+    }
     const row = createStreamRow(app.db, {
       title: parsed.data.title,
       kind: parsed.data.kind ?? "video",
@@ -364,10 +382,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (onAir && body.data.posterPalette !== undefined) {
       return reply.code(409).send({ error: "stream_on_air" });
     }
-    // The kind and the recording flag decide what the encoder does, so only a
-    // draft may change them.
-    if (stream.status !== "draft" && (body.data.kind !== undefined || body.data.record !== undefined)) {
-      return reply.code(409).send({ error: "stream_not_editable" });
+    // Kind and recording shape the encoder, so they are editable while the
+    // broadcast is idle (draft or ended) and frozen once it is on air.
+    if (onAir && body.data.kind !== undefined) {
+      return reply.code(409).send({ error: "stream_on_air" });
     }
     if (body.data.title !== undefined) {
       app.db.prepare("UPDATE streams SET title = ? WHERE id = ?").run(body.data.title, stream.id);
