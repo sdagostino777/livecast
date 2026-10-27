@@ -62,6 +62,7 @@ export interface StreamView {
   posterUrl: string;
   posterImageUrl: string | null;
   iconUrl: string | null;
+  publicIconUrl: string;
   fallbackPosterUrl: string;
   adminPosterUrl: string;
   adminIconUrl: string;
@@ -126,6 +127,7 @@ export interface LiveMeta {
   posterUrl: string;
   posterImageUrl: string | null;
   iconUrl: string | null;
+  publicIconUrl: string;
   posterOverlay: boolean;
   fallbackPosterUrl: string;
   startedAt: string | null;

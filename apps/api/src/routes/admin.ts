@@ -606,7 +606,14 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
-    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "no-store");
+    reply.header("cache-control", "no-store");
+    if (stream.icon_ext) {
+      const file = path.join(uploadsDir(), `${stream.slug}.icon.${stream.icon_ext}`);
+      const type = stream.icon_ext === "png" ? "image/png" : stream.icon_ext === "webp" ? "image/webp" : "image/jpeg";
+      reply.header("content-type", type);
+      return reply.send(fs.createReadStream(file));
+    }
+    reply.header("content-type", "image/svg+xml; charset=utf-8");
     return iconSvg({ title: stream.title, seed: stream.slug, palette: stream.poster_palette });
   });
 

@@ -1355,6 +1355,16 @@ h2 {
   background: #04101d;
 }
 
+.player-event-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  object-fit: cover;
+  margin: 0 auto 14px;
+  display: block;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
 .online-timer {
   margin-left: auto;
   display: inline-flex;

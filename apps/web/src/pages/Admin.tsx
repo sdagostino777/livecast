@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, Checks, iconSrc, Me, Overview, posterSrc, Settings, StreamView, uploadStreamImage } from "../api";
+import { api, ApiError, Checks, Me, Overview, posterSrc, Settings, StreamView, uploadStreamImage } from "../api";
 import { useBrand } from "../brand";
 import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
@@ -858,8 +858,11 @@ function BroadcastConfig({
               </span>
             )}
           </div>
-          {current?.iconUrl && (
-            <img className="thumb icon-thumb" src={`${iconSrc(current)}?v=${previewTick}`} alt="" />
+          {current && (
+            <span className="row" style={{ gap: 8, alignItems: "center" }}>
+              <img className="thumb icon-thumb" src={`${current.adminIconUrl}?v=${previewTick}`} alt="Icona dell'evento" />
+              <span className="small muted">Icona</span>
+            </span>
           )}
         </div>
 

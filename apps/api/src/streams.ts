@@ -38,7 +38,10 @@ export interface StreamView {
   posterUrl: string;
   /** The uploaded image itself, null when the artwork is generated. */
   posterImageUrl: string | null;
+  /** Raw uploaded icon, null when the initials are generated. */
   iconUrl: string | null;
+  /** Icon the audience sees (uploaded file or generated initials). */
+  publicIconUrl: string;
   /** Kept for clients that ask for the template explicitly. */
   fallbackPosterUrl: string;
   adminPosterUrl: string;
@@ -63,6 +66,7 @@ export function toView(row: StreamRow, publicBaseUrl: string = process.env.PUBLI
     posterUrl: `/api/poster/${row.slug}`,
     posterImageUrl: row.poster_ext ? `/uploads/${row.slug}.poster.${row.poster_ext}` : null,
     iconUrl: row.icon_ext ? `/uploads/${row.slug}.icon.${row.icon_ext}` : null,
+    publicIconUrl: `/api/icon/${row.slug}`,
     fallbackPosterUrl: `/api/poster/${row.slug}`,
     adminPosterUrl: `/api/admin/poster/${row.id}`,
     adminIconUrl: `/api/admin/icon/${row.id}`,
