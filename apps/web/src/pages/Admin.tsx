@@ -333,12 +333,6 @@ export function Admin() {
         </div>
       </header>
 
-      {onAir && (
-        <div className="banner banner-onair">
-          <span className="blink-dot" aria-hidden /> <b>Sei in onda.</b> Non chiudere né ricaricare questa pagina: la
-          trasmissione cadrebbe.
-        </div>
-      )}
       {error && <div className="banner banner-error">{error}</div>}
       {toast && <div className="banner banner-ok">{toast}</div>}
 
@@ -438,6 +432,13 @@ export function Admin() {
             {pubError && <p className="error-text small">{pubError}</p>}
           </div>
         </div>
+
+        {onAir && (
+          <p className="muted small" style={{ marginTop: 12 }}>
+            <span className="blink-dot" aria-hidden /> In onda: lascia aperta questa pagina finché la diretta non è
+            finita.
+          </p>
+        )}
 
         {onAir && <ExternalEncoderPanel ov={ov} />}
       </section>

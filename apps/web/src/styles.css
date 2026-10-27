@@ -1366,20 +1366,6 @@ h2 {
 
 /* --- on-air warning ---------------------------------------------------- */
 
-.banner-onair {
-  background: rgba(224, 49, 49, 0.08);
-  border: 1.5px solid rgba(224, 49, 49, 0.35);
-  color: #a01f1f;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-[data-theme="dark"] .banner-onair {
-  background: rgba(224, 49, 49, 0.14);
-  color: #ffb4b4;
-}
-
 .modal-backdrop {
   position: fixed;
   inset: 0;
