@@ -83,7 +83,7 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 ## The panel in one screen
 
-![The panel while live](docs/screenshots/admin.png)
+![The panel while live — green LEDs per publisher, capacity banner, settings](docs/screenshots/admin.png)
 
 - **Diretta** — create a broadcast, "Crea e vai in onda", stop it, and copy the
   public link. OBS credentials are masked until revealed (the reveal is audited).
@@ -169,6 +169,12 @@ limit of a single-box install, and it needs a plan, not a promise:
 3. **Publisher-side redundancy** — the primary/backup publish paths cover the
    other half of the equation: if the *encoder* fails, the show continues; if
    the *server* fails, no software on it can. The two failures are independent.
+
+A failover looks like this: the primary encoder disappears, the backup one is
+already connected, and the panel simply switches "In uso" — the broadcast does
+not stop, it restarts from the other publisher within about three seconds.
+
+![The panel during a failover: backup input in use](docs/screenshots/admin-failover.png)
 
 ## Tests
 
