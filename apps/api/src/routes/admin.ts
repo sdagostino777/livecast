@@ -43,7 +43,9 @@ import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
 import { artworkFor } from "../artwork.js";
+import { posterSmallPath } from "../artwork.js";
 import { removeBrandLogo, saveBrandLogo } from "../brand.js";
+import { makePosterCopy } from "../images.js";
 import { countViewers } from "../presence.js";
 import { iconSvg } from "../poster.js";
 import { journalLines, recentInMemory, remember } from "../services/logs.js";
@@ -343,6 +345,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({ error: "stream_active" });
     }
     for (const old of existing) {
+      try {
+        fs.unlinkSync(posterSmallPath(old.slug));
+      } catch {
+        /* not present */
+      }
       for (const kind of ["poster", "icon"] as const) {
         for (const ext of ["jpg", "png", "webp"]) {
           try {
@@ -427,6 +434,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     // The event images belong to the stream: removing the row must not leave
     // files behind in DATA_DIR/uploads.
+    for (const derived of [posterSmallPath(stream.slug)]) {
+      try {
+        fs.unlinkSync(derived);
+      } catch {
+        /* not present */
+      }
+    }
     for (const kind of ["poster", "icon"] as const) {
       for (const ext of ["jpg", "png", "webp"]) {
         try {
@@ -470,6 +484,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
     const streamId = stream.id;
     const slug = stream.slug;
+    // A new broadcast never inherits segments: the slug (and therefore the
+    // directory) survives a kind switch, and a stale master.m3u8 referencing the
+    // old ladder would be served to viewers while the encoder is starting.
+    fs.rmSync(hlsDir(slug), { recursive: true, force: true });
     try {
       app.pipeline.start(
         {
@@ -647,7 +665,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     }
-    fs.writeFileSync(path.join(dir, `${stream.slug}.${kind}.${ext}`), body);
+    const target = path.join(dir, `${stream.slug}.${kind}.${ext}`);
+    fs.writeFileSync(target, body);
+    if (kind === "poster") makePosterCopy(target, posterSmallPath(stream.slug));
     app.db.prepare(`UPDATE streams SET ${kind}_ext = ? WHERE id = ?`).run(ext, stream.id);
     audit(app.db, {
       userId: session.user.id,
@@ -717,6 +737,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           fs.unlinkSync(path.join(uploadsDir(), `${stream.slug}.${kind}.${ext}`));
         } catch {
           /* already gone */
+        }
+        if (kind === "poster") {
+          try {
+            fs.unlinkSync(posterSmallPath(stream.slug));
+          } catch {
+            /* already gone */
+          }
         }
       }
       app.db.prepare(`UPDATE streams SET ${kind}_ext = NULL WHERE id = ?`).run(stream.id);

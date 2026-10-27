@@ -29,6 +29,19 @@ export function posterFile(row: StreamRow): string | null {
   return fs.existsSync(file) ? file : null;
 }
 
+/** The downscaled copy used for the composed artwork; see `posterSmallPath`. */
+export function posterSmallFile(row: StreamRow): string | null {
+  const file = path.join(uploadsDir(), `${row.slug}.poster-small.jpg`);
+  return fs.existsSync(file) ? file : null;
+}
+
+export function posterSmallPath(slug: string): string {
+  return path.join(uploadsDir(), `${slug}.poster-small.jpg`);
+}
+
+/** An upload small enough to be worth inlining as a data URI. */
+const MAX_INLINE_BYTES = 4 * 1024 * 1024;
+
 export function artworkFor(row: StreamRow, brand: string): Artwork {
   const generated = posterSvg({
     title: row.title,
@@ -43,10 +56,18 @@ export function artworkFor(row: StreamRow, brand: string): Artwork {
   if (!row.poster_overlay) {
     return { kind: "file", file, contentType: CONTENT_TYPES[row.poster_ext!] ?? "application/octet-stream" };
   }
+
+  // Inline the picture, preferring the 1280px JPEG made at upload time: the SVG
+  // is served to browsers and phones, and a multi-megabyte base64 would be paid
+  // on every player load.
+  const inline = posterSmallFile(row) ?? file;
+  const bytes = fs.readFileSync(inline);
+  if (bytes.length > MAX_INLINE_BYTES) return { kind: "file", file, contentType: CONTENT_TYPES[row.poster_ext!] ?? "application/octet-stream" };
+  const mime = inline === file ? (CONTENT_TYPES[row.poster_ext!] ?? "application/octet-stream") : "image/jpeg";
   return {
     kind: "svg",
     body: overlaySvg({
-      imageHref: `/uploads/${row.slug}.poster.${row.poster_ext}`,
+      imageHref: `data:${mime};base64,${bytes.toString("base64")}`,
       title: row.title,
       brand,
     }),

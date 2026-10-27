@@ -103,6 +103,9 @@ export function Player({ slug }: { slug: string }) {
     <div className="player-page">
       <main className="player-main">
         <MediaPlayer
+          // A kind change replaces the media element: remount so hls.js is not
+          // left attached to the <video> that no longer exists.
+          key={meta?.kind ?? "video"}
           hlsUrl={meta?.hlsUrl ?? null}
           kind={meta?.kind ?? "video"}
           live={meta?.status === "live"}

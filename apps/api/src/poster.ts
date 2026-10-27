@@ -98,6 +98,8 @@ export function posterSvg(opts: { title: string; brand: string; seed: string; pa
  * source for both the panel and the player.
  */
 export function overlaySvg(opts: { imageHref: string; title: string; brand: string }): string {
+  // `imageHref` is a data: URI on purpose: an SVG loaded through <img> cannot
+  // fetch external subresources, so a linked /uploads/… path renders empty.
   const lines = wrapTitle(opts.title);
   const fontSize = lines.some((line) => line.length > 18) ? 54 : 66;
   const lineHeight = fontSize * 1.16;

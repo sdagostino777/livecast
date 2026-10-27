@@ -47,3 +47,28 @@ export function imageDimensions(buf: Buffer): { width: number; height: number } 
 
   return null;
 }
+
+/**
+ * Writes a 1280px-wide JPEG copy of a poster.
+ *
+ * The composed artwork (image + title) is an SVG that must carry the picture
+ * inside it, and inlining the original upload would ship megabytes to every
+ * viewer. FFmpeg is already here for the ladder, so it does the resize; if it
+ * fails, the artwork falls back to inlining the original file.
+ */
+export function makePosterCopy(source: string, destination: string): void {
+  void runFfmpeg(source, destination);
+}
+
+async function runFfmpeg(source: string, destination: string): Promise<void> {
+  const { execFile } = await import("node:child_process");
+  const bin = process.env.FFMPEG_BIN || "ffmpeg";
+  execFile(
+    bin,
+    ["-y", "-loglevel", "error", "-i", source, "-vf", "scale='min(1280,iw)':-2", "-q:v", "4", destination],
+    { timeout: 20_000 },
+    () => {
+      /* best effort: the artwork has a fallback */
+    },
+  );
+}

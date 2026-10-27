@@ -11,6 +11,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
+import { hlsDir } from "../src/config.js";
 import { createUser, getUserByUsername, hashPassword } from "../src/auth.js";
 import { MediaMtxClient } from "../src/services/mediamtx.js";
 import type { PipelineApi, PipelineCallbacks, PipelineStartOptions } from "../src/services/pipeline.js";
@@ -538,7 +539,9 @@ describe("admin + public stream lifecycle", () => {
     const composedArtwork = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
     expect(composedArtwork.headers["content-type"]).toContain("image/svg+xml");
     expect(composedArtwork.body).toContain("Evento con poster");
-    expect(composedArtwork.body).toContain(`/uploads/${stream.slug}.poster.png`);
+    // The picture travels inside the SVG: an <img>-loaded SVG cannot fetch an
+    // external href, which is what made the preview look empty.
+    expect(composedArtwork.body).toContain("data:image/png;base64,");
 
     const bogus = await app.inject({
       method: "POST",
@@ -820,6 +823,26 @@ describe("admin + public stream lifecycle", () => {
     // The panel never shows a number it cannot explain.
     expect((await app.inject({ method: "POST", url: `/api/live/${stream.slug}/presence`, payload: {} })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: "/api/live/aaaaaaaaaa/presence", payload: { id: "x-viewer" } })).statusCode).toBe(404);
+  });
+
+  it("starts every run from an empty output directory", async () => {
+    const cookie = await login();
+    const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "Cambio tipo" } });
+    const stream = created.json().stream;
+    const outDir = hlsDir(stream.slug);
+
+    // A previous video run left its ladder behind; switching to audio reuses the
+    // same link and directory, and stale playlists must not survive the switch.
+    fs.mkdirSync(path.join(outDir, "720"), { recursive: true });
+    fs.writeFileSync(path.join(outDir, "720", "seg_000001.ts"), "old");
+    fs.writeFileSync(path.join(outDir, "master.m3u8"), "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2800000\n720/index.m3u8\n");
+
+    await app.inject({ method: "PATCH", url: `/api/admin/streams/${stream.id}`, headers: { cookie }, payload: { kind: "audio" } });
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+
+    expect(fs.existsSync(path.join(outDir, "master.m3u8"))).toBe(false);
+    expect(fs.existsSync(path.join(outDir, "720"))).toBe(false);
+    fs.rmSync(outDir, { recursive: true, force: true });
   });
 
   it("freezes the title overlay while on air", async () => {

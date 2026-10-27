@@ -214,7 +214,7 @@ export function Admin() {
     title: string,
     kind: "video" | "audio",
     record: boolean,
-    files: { poster?: File; icon?: File; palette?: string | null },
+    files: { poster?: File; palette?: string | null },
   ) {
     await act(async () => {
       let streamId = current?.id ?? null;
@@ -228,7 +228,6 @@ export function Admin() {
         await api.patch(`/api/admin/streams/${streamId}`, { posterPalette: files.palette });
       }
       if (files.poster) await uploadStreamImage(streamId, "poster", files.poster);
-      if (files.icon) await uploadStreamImage(streamId, "icon", files.icon);
       notify("Diretta salvata.");
       setTitleDraft(title);
     });
@@ -242,17 +241,14 @@ export function Admin() {
     if (!current) return;
     await act(async () => {
       const previous = current;
-      const carried: Array<{ kind: "poster" | "icon"; name: string; file: Blob }> = [];
-      for (const [kind, url] of [
-        ["poster", previous.posterImageUrl],
-        ["icon", previous.iconUrl],
-      ] as const) {
-        if (!url) continue;
-        const response = await fetch(url);
-        if (!response.ok) continue;
-        const blob = await response.blob();
-        const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
-        carried.push({ kind, name: `${kind}.${ext}`, file: blob });
+      let carried: { name: string; blob: Blob } | null = null;
+      if (previous.posterImageUrl) {
+        const response = await fetch(previous.posterImageUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+          carried = { name: `poster.${ext}`, blob };
+        }
       }
       const created = await api.post<{ stream: StreamView }>("/api/admin/streams", {
         title: titleDraft.trim() || previous.title,
@@ -264,8 +260,8 @@ export function Admin() {
         posterPalette: previous.posterPalette,
         posterOverlay: previous.posterOverlay,
       });
-      for (const item of carried) {
-        await uploadStreamImage(id, item.kind, new File([item.file], item.name, { type: item.file.type }));
+      if (carried) {
+        await uploadStreamImage(id, "poster", new File([carried.blob], carried.name, { type: carried.blob.type }));
       }
       notify("Nuovo evento: il link è cambiato.");
     });
@@ -275,11 +271,11 @@ export function Admin() {
    * An image chosen for an event that already exists uploads immediately: the
    * panel has no save button, so waiting for one meant nothing happened.
    */
-  async function uploadImage(kind: "poster" | "icon", file: File) {
+  async function uploadImage(kind: "poster", file: File) {
     if (!current) return;
     await act(async () => {
       await uploadStreamImage(current.id, kind, file);
-      notify(kind === "poster" ? "Immagine caricata." : "Icona caricata.");
+      notify("Immagine caricata.");
     });
   }
 
@@ -675,16 +671,15 @@ function BroadcastConfig({
     title: string,
     kind: "video" | "audio",
     record: boolean,
-    files: { poster?: File; icon?: File; palette?: string | null },
+    files: { poster?: File; palette?: string | null },
   ) => Promise<void>;
   onNewEvent: () => Promise<void>;
-  onUploadImage: (kind: "poster" | "icon", file: File) => Promise<void>;
+  onUploadImage: (kind: "poster", file: File) => Promise<void>;
 }) {
   const [kind, setKind] = useState<"video" | "audio">("video");
   const [record, setRecord] = useState(false);
   const [palette, setPalette] = useState<string | null>(null);
   const [posterFile, setPosterFile] = useState<File | null>(null);
-  const [iconFile, setIconFile] = useState<File | null>(null);
   const [posterPreview, setPosterPreview] = useState<string | null>(null);
   const [overlay, setOverlay] = useState(false);
   const posterRef = useRef<HTMLInputElement | null>(null);
@@ -718,11 +713,9 @@ function BroadcastConfig({
     if (!titleDraft.trim() || current) return;
     await onCreate(titleDraft.trim(), kind, record, {
       ...(posterFile ? { poster: posterFile } : {}),
-      ...(iconFile ? { icon: iconFile } : {}),
       palette,
     });
     setPosterFile(null);
-    setIconFile(null);
     if (posterPreview) URL.revokeObjectURL(posterPreview);
     setPosterPreview(null);
   }
@@ -843,22 +836,6 @@ function BroadcastConfig({
             <button type="button" className="btn btn-ghost btn-small" disabled={onAir} onClick={() => posterRef.current?.click()}>
               {posterFile || current?.posterImageUrl ? "Cambia immagine" : "Carica immagine"}
             </button>
-            <label className="btn btn-ghost btn-small" style={{ cursor: onAir ? "not-allowed" : "pointer" }}>
-              {current?.iconUrl ? "Cambia icona" : "Carica icona"}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                disabled={onAir}
-                onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null;
-                  event.target.value = "";
-                  if (!file) return;
-                  if (current) void onUploadImage("icon", file);
-                  else setIconFile(file);
-                }}
-              />
-            </label>
           </div>
           {(posterFile || current?.posterImageUrl) && (
             <label className="check">
@@ -890,12 +867,6 @@ function BroadcastConfig({
               </span>
             )}
           </div>
-          {current && (
-            <span className="row" style={{ gap: 8, alignItems: "center" }}>
-              <img className="thumb icon-thumb" src={`${current.adminIconUrl}?v=${previewTick}`} alt="Icona dell'evento" />
-              <span className="small muted">Icona</span>
-            </span>
-          )}
         </div>
 
         {!current && (

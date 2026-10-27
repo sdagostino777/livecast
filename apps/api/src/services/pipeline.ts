@@ -373,6 +373,11 @@ export class HlsPipeline implements PipelineApi {
   start(opts: PipelineStartOptions, callbacks: PipelineCallbacks): void {
     if (this.isActive()) throw new Error("pipeline already running");
 
+    // Whatever a previous run left behind is not this broadcast: switching kind
+    // (video ↔ audio) reuses the same link and the same directory, so a stale
+    // master.m3u8 pointing at the old ladder would be served to viewers while
+    // the new encoder is still starting.
+    fs.rmSync(opts.outDir, { recursive: true, force: true });
     const rungs = opts.kind === "audio" ? ["audio"] : ["720", "480", "360"];
     for (const rung of rungs) fs.mkdirSync(path.join(opts.outDir, rung), { recursive: true });
     if (opts.recordFile) fs.mkdirSync(path.dirname(opts.recordFile), { recursive: true });
