@@ -507,7 +507,7 @@ describe("admin + public stream lifecycle", () => {
     expect(removed.json().stream.posterUrl).toBeNull();
   });
 
-  it("allows a title change at any time, but not the kind once live", async () => {
+  it("freezes title and palette once on air, and allows them again when ended", async () => {
     const cookie = await login();
     const created = await app.inject({
       method: "POST",
@@ -516,28 +516,65 @@ describe("admin + public stream lifecycle", () => {
       payload: { title: "Congresso Regionale", kind: "video" },
     });
     const stream = created.json().stream;
-    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
-    pipeline.emitLive();
 
-    const renamed = await app.inject({
+    // Before going live everything is editable.
+    const renamedEarly = await app.inject({
       method: "PATCH",
       url: `/api/admin/streams/${stream.id}`,
       headers: { cookie },
-      payload: { title: "Congresso Regionale 2027" },
+      payload: { title: "Congresso Regionale 2027", posterPalette: "teal" },
     });
-    expect(renamed.statusCode).toBe(200);
-    expect(renamed.json().stream.title).toBe("Congresso Regionale 2027");
+    expect(renamedEarly.statusCode).toBe(200);
+    expect(renamedEarly.json().stream.title).toBe("Congresso Regionale 2027");
+    expect(renamedEarly.json().stream.posterPalette).toBe("teal");
 
-    const kindChange = await app.inject({
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+    pipeline.emitLive();
+
+    // On air: the identity is frozen, including the artwork.
+    const renamedLive = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { title: "Cambio in diretta" },
+    });
+    expect(renamedLive.statusCode).toBe(409);
+    expect(renamedLive.json().error).toBe("stream_on_air");
+
+    const paletteLive = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { posterPalette: "blue" },
+    });
+    expect(paletteLive.statusCode).toBe(409);
+
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const uploadLive = await app.inject({
+      method: "POST",
+      url: `/api/admin/streams/${stream.id}/poster`,
+      headers: { cookie, "content-type": "image/png" },
+      payload: png,
+    });
+    expect(uploadLive.statusCode).toBe(409);
+
+    const kindLive = await app.inject({
       method: "PATCH",
       url: `/api/admin/streams/${stream.id}`,
       headers: { cookie },
       payload: { kind: "audio" },
     });
-    expect(kindChange.statusCode).toBe(409);
+    expect(kindLive.statusCode).toBe(409);
 
-    const livePage = await app.inject({ method: "GET", url: `/api/live/${stream.slug}` });
-    expect(livePage.json().title).toBe("Congresso Regionale 2027");
+    // Ended: editing is allowed again.
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/stop`, headers: { cookie } });
+    const renamedEnded = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/streams/${stream.id}`,
+      headers: { cookie },
+      payload: { title: "Congresso Regionale 2027 — replica" },
+    });
+    expect(renamedEnded.statusCode).toBe(200);
   });
 
   it("generates poster and icon artwork when no image was uploaded", async () => {

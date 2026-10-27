@@ -4,7 +4,7 @@
 
 ```
                 ┌────────────────────────────────────────────────────┐
-  OBS (operator)│  RTMP :1935  ──▶  MediaMTX                          │
+  programma esterno (operator)│  RTMP :1935  ──▶  MediaMTX                          │
                 │                     │ auth: publish to "live" only   │
                 │                     ▼                               │
                 │  FFmpeg (spawned by the API)                       │
@@ -57,7 +57,7 @@ idle ──start()──▶ starting ──first segment──▶ live ──sto
 ```
 
 FFmpeg exits whenever the RTMP socket closes — a Wi-Fi blip, a laptop lid, an
-OBS restart. The exit handler relaunches after 2.5 s with no user action. The
+programma esterno restart. The exit handler relaunches after 2.5 s with no user action. The
 watchdog catches the other case: an encoder still running but producing nothing
 (hung x264, a publisher that stopped sending frames without closing the socket).
 It counts monitor ticks over the segment list rather than comparing wall-clock
@@ -67,12 +67,12 @@ times, which keeps the behaviour deterministic under tests.
 
 | Failure | Detection | Recovery |
 | --- | --- | --- |
-| OBS disconnects mid-stream | FFmpeg input EOF, exit handler | relaunch in ≤ 2.5 s; resumes on OBS reconnect |
+| programma esterno disconnects mid-stream | FFmpeg input EOF, exit handler | relaunch in ≤ 2.5 s; resumes on programma esterno reconnect |
 | Primary publisher dies, backup is live | FFmpeg input EOF / watchdog, `probeReady` before each launch | relaunch reading `/backup`; panel shows "In uso: backup" |
 | Encoder hung, socket alive | segment list unchanged for 120 s | SIGKILL, then the same relaunch path |
-| MediaMTX crashes | systemd `Restart=always` (2 s) | OBS reconnects; encoder relaunches when the ingest path is ready |
+| MediaMTX crashes | systemd `Restart=always` (2 s) | programma esterno reconnects; encoder relaunches when the ingest path is ready |
 | Fastify crashes | systemd `Restart=always` (2 s) | sessions and stream state live in SQLite, not memory |
-| VPS reboots | systemd `WantedBy=multi-user.target` | both units start; a stream that was live resumes when OBS reconnects |
+| VPS reboots | systemd `WantedBy=multi-user.target` | both units start; a stream that was live resumes when programma esterno reconnects |
 | Operator never publishes | `INGEST_WAIT_SECONDS` timer | stream ends itself and says so; the page shows "not started yet" |
 
 The honest limits:
@@ -107,7 +107,7 @@ The honest limits:
   username exists or not — the login form must not be a username oracle.
 - Ingest: publish restricted to the `live` path with a generated 32-character
   key, checked by MediaMTX; readers restricted to loopback.
-- The panel reveals the OBS credential only on an authenticated request, and
+- The panel reveals the programma esterno credential only on an authenticated request, and
   writes `ingest_key_revealed` to the audit log.
 
 ## Capacity in numbers
@@ -135,7 +135,7 @@ origin, which no single VPS port provides. The design answer:
 ## Runtime settings and why they are in SQLite
 
 Deployment facts that change without a code deployment — the CDN hostname, the
-public origin, what OBS connects to — live in a `settings` table seeded from the
+public origin, what programma esterno connects to — live in a `settings` table seeded from the
 environment on first boot and editable from the panel. The `SettingsStore`
 validates each value (URL shape, port range, CDN ≠ origin) before persisting.
 

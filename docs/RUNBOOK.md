@@ -9,17 +9,17 @@ to get wrong: attaching a CDN, and verifying the encoder.
 2. Open `https://<domain>/admin` and log in.
 3. Create the broadcast ("Crea"), choosing **Video** or **Solo audio** and the
    event images. It appears in **Dirette** as a draft.
-4. Press **Vai in onda** on that row: status becomes **In attesa di OBS**. An
-   audio-only broadcast ignores any video OBS sends, so the operator can leave
+4. Press **Vai in onda** on that row: status becomes **In attesa di programma esterno**. An
+   audio-only broadcast ignores any video programma esterno sends, so the operator can leave
    the scene as it is.
-4. In OBS, start streaming. The panel flips to **In onda** within ~5 s.
+4. In programma esterno, start streaming. The panel flips to **In onda** within ~5 s.
 5. Open the `/live/<slug>` link on a phone over mobile data, press play, and
    confirm the **LIVE** badge. This is the only test that matters.
 6. For a large event: attach the CDN **before** sharing the link (next section).
 7. After the event: **Termina**. The stream status becomes "Terminata"; the
    public page says so.
 
-If OBS never connects, the stream ends itself after `INGEST_WAIT_SECONDS` (10
+If programma esterno never connects, the stream ends itself after `INGEST_WAIT_SECONDS` (10
 minutes by default) rather than waiting forever — restart it from the panel.
 
 ## Redundancy drill (primary / backup encoder)
@@ -38,9 +38,9 @@ To rehearse:
    FFmpeg relaunches, nothing more.
 3. Restart the primary: the next relaunch (or the next dropout) returns to it.
 
-The backup encoder can be a second OBS on another machine, a phone, or a spare
+The backup encoder can be a second programma esterno on another machine, a phone, or a spare
 laptop on a different network. Two encoders on the same Wi-Fi protect against
-the OBS crashing, not against the network dying.
+the programma esterno crashing, not against the network dying.
 
 ## Managing people
 
@@ -83,7 +83,7 @@ To go back to origin delivery: clear the CDN field and save.
 ## Verifying the encoder without a broadcaster
 
 Run this on the VPS (or anywhere with FFmpeg) to produce the exact ladder the
-pipeline produces, without OBS or MediaMTX:
+pipeline produces, without programma esterno or MediaMTX:
 
 ```bash
 ffmpeg -hide_banner \
@@ -150,7 +150,7 @@ Expect `Cache-Control: public, max-age=31536000, immutable` on segments and
 
 | Symptom | Check |
 | --- | --- |
-| Panel shows "OBS non collegato" | `journalctl -u livecast-mediamtx -n 50`; is 1935/tcp open (`ufw status`)? Is the RTMP URL in OBS the one the panel shows? |
+| Panel shows "programma esterno non collegato" | `journalctl -u livecast-mediamtx -n 50`; is 1935/tcp open (`ufw status`)? Is the RTMP URL in programma esterno the one the panel shows? |
 | Panel shows "MediaMTX non raggiungibile" | `curl -s http://127.0.0.1:9997/v3/paths/get/live` — the media server process, not the broadcaster, is down. |
 | Stream stays "Preparazione video…" | `journalctl -u livecast -f` — FFmpeg's stderr is logged there (last 600 chars also surface in the panel). |
 | Player says "Segnale non disponibile" | The page retries by itself for ~1 minute. If the encoder log shows repeated restarts, the publisher is gone. |

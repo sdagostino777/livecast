@@ -1,6 +1,6 @@
 # Livecast
 
-**Self-hostable live audio/video streaming.** A small team broadcasts from OBS;
+**Self-hostable live audio/video streaming.** A small team broadcasts from programma esterno;
 the audience gets a shareable link and a player with play and pause. Adaptive
 HLS for video, a clean audio-only mode, and a control plane small enough to read
 in an afternoon — running on a €8 VPS until the audience justifies a CDN.
@@ -19,7 +19,7 @@ code is organised around failure, not around convenience. See
 (`https://live.example.com`), taken by Playwright through a real Chrome instance.*
 
 ```
- OBS ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
+ programma esterno ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
                          │
                          ▼
                     FFmpeg ──▶ 720p / 480p / 360p HLS ──▶ nginx ──▶ Bunny/Cloudflare CDN (optional)
@@ -41,7 +41,7 @@ code is organised around failure, not around convenience. See
 | **Users, not just an account** | One admin manages accounts; operators can run broadcasts. The admin account itself cannot be deleted or have its password reset by anyone else. |
 | **Event poster and icon** | Each broadcast carries a 16:9 poster (what viewers see before pressing play) and a square icon (lists), uploaded from the panel — or generated automatically from the title with a gradient, when nothing is uploaded. |
 | **Light / dark / system** | The panel follows a theme preference; the player stays dark on purpose. |
-| **Publishing without OBS** | Camera or screen share straight from the panel over WebRTC (WHIP); OBS stays supported for long events. |
+| **Publishing without programma esterno** | Camera or screen share straight from the panel over WebRTC (WHIP); programma esterno stays supported for long events. |
 | **First-run safety** | The default `admin / admin` account must change its password before the panel does anything else. |
 | **SQLite** | One operator, a handful of streams. A database server would be a process to keep alive for no benefit. |
 
@@ -78,9 +78,9 @@ units that restart themselves, nginx, free HTTPS, the firewall and the admin
 account. Then open `https://live.yourdomain.com/admin`, sign in as
 **admin / admin** — the panel forces a new password immediately.
 
-No OBS is required: the panel can publish from the camera or a shared screen
+No programma esterno is required: the panel can publish from the camera or a shared screen
 (WebRTC over WHIP). The page must stay open while publishing; for long events
-OBS remains the sturdier option and the panel shows its URL.
+programma esterno remains the sturdier option and the panel shows its URL.
 
 ## Deploy on a VPS
 
@@ -99,7 +99,7 @@ Both scripts are idempotent. The deploy prints the generated admin password once
 and stores it in `/root/.livecast-credentials` on the server.
 
 Then: open `https://<domain>/admin`, log in, and copy the RTMP URL the panel
-shows into **OBS → Settings → Stream → Server** (stream key left empty). Create
+shows into **programma esterno → Settings → Stream → Server** (stream key left empty). Create
 a broadcast from the panel and press play on `/live/<slug>`.
 
 ## The panel in one screen
@@ -108,7 +108,7 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 - **Diretta** — create a broadcast with its title, kind and event images ("Crea"),
   then start it from the list with "Vai in onda" when you are ready. Stop it and
-  copy the public link. OBS credentials are masked until revealed (audited).
+  copy the public link. programma esterno credentials are masked until revealed (audited).
 - **Dirette** — previous broadcasts with their kind (video / audio-only), poster
   thumbnail and link. Deleted rows never own files on disk.
 - **⚙ Impostazioni** — the gear opens a page with **Aspetto** (light / dark /
@@ -141,11 +141,11 @@ a broadcast from the panel and press play on `/live/<slug>`.
 | `PORT` / `HOST` | `4100` / `127.0.0.1` | Fastify listener behind nginx. |
 | `DATA_DIR` | `./data` | SQLite database, HLS output, recordings. |
 | `PUBLIC_URL` | `http://localhost:4100` | Canonical origin: page links and the Origin check. |
-| `INGEST_HOST` / `INGEST_PORT` | host from `PUBLIC_URL` / `1935` | What OBS connects to (editable at runtime in the panel). |
+| `INGEST_HOST` / `INGEST_PORT` | host from `PUBLIC_URL` / `1935` | What programma esterno connects to (editable at runtime in the panel). |
 | `PUBLISH_USER` / `PUBLISH_PASS` | `publisher` / — | Broadcaster credentials shown in the panel, enforced by MediaMTX. |
 | `MEDIAMTX_READ_USER` / `_PASS` | — | Loopback credentials FFmpeg uses to read the stream. |
 | `COOKIE_SECURE` | `false` in dev, `true` in production | Session cookies over TLS only. |
-| `INGEST_WAIT_SECONDS` | `600` | How long a stream waits for OBS before ending itself. |
+| `INGEST_WAIT_SECONDS` | `600` | How long a stream waits for programma esterno before ending itself. |
 | `BRAND_NAME` | `Livecast` | Display name until one is saved in the panel. |
 
 Runtime settings (public URL, CDN, ingest host/port) live in the database,
@@ -172,9 +172,9 @@ and the operator runbook (go-live checklist, CDN attach, troubleshooting) is
 
 | Failure | What recovers it |
 | --- | --- |
-| OBS disconnects / laptop sleeps | FFmpeg exits, the supervisor relaunches it in < 3 s, the publisher reconnects when it can |
+| programma esterno disconnects / laptop sleeps | FFmpeg exits, the supervisor relaunches it in < 3 s, the publisher reconnects when it can |
 | Encoder hangs with an open socket | Watchdog: 2 minutes of unchanged segments ⇒ SIGKILL + relaunch, stream stays live |
-| Media server crashes | systemd restarts it in 2 s; the broadcast resumes on OBS reconnect |
+| Media server crashes | systemd restarts it in 2 s; the broadcast resumes on programma esterno reconnect |
 | API crashes | systemd restarts it; the player keeps its last segments and the page polls |
 | Event-size audience | CDN base URL in the panel — segments are immutable and cache for a year |
 
@@ -204,7 +204,7 @@ not stop, it restarts from the other publisher within about three seconds.
 ## Guides
 
 Two illustrated quick-start guides — install once, create a broadcast, go live
-from OBS, attach a CDN, survive the unexpected. Same content, two languages:
+from programma esterno, attach a CDN, survive the unexpected. Same content, two languages:
 
 | | |
 | --- | --- |
