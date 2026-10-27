@@ -403,9 +403,11 @@ export class HlsPipeline implements PipelineApi {
       }
     }
     meta.currentInput = which;
-    // After a few failed opens, try the other protocol: a WebRTC publisher is
-    // readable over RTSP but not over RTMP, and vice versa in edge cases.
-    const useFallback = meta.attempts >= 2;
+    // Alternate protocols instead of switching for good: a WebRTC publisher is
+    // readable over RTSP but not over RTMP, so committing to the fallback after
+    // two failures would abandon the only working path. Odd attempts from the
+    // third onwards try the fallback, everything else tries the primary.
+    const useFallback = meta.attempts >= 3 && meta.attempts % 2 === 1;
     const protocolUrl =
       which === "backup"
         ? useFallback && meta.opts.inputUrls.fallbackBackup
@@ -415,6 +417,7 @@ export class HlsPipeline implements PipelineApi {
           ? meta.opts.inputUrls.fallbackPrimary
           : meta.opts.inputUrls.primary;
     const inputUrl = protocolUrl;
+    this.lastInputUrl = inputUrl.replace(/:[^:@/]+@/, ":****@");
 
     if (!meta.caps) {
       const probe = meta.opts.probeInput ?? ((url: string) => probeMedia(meta.opts.ffmpegBin, url));
@@ -501,6 +504,9 @@ export class HlsPipeline implements PipelineApi {
   }
 
   lastExit: { code: number | null; signal: string | null; stderrTail: string } | null = null;
+
+  /** Last input actually attempted, credentials masked — for the panel's diagnostics. */
+  lastInputUrl: string | null = null;
 
   /** Segment names currently on disk, across all rungs: "720/seg_000012.ts" etc. */
   private listSegments(outDir: string, kind: StreamKind): Set<string> {
