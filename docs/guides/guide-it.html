@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>Guida rapida — Livecast</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: #17212b;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      .page {
+        width: 210mm;
+        height: 296mm;
+        padding: 18mm 16mm 14mm;
+        page-break-after: always;
+        position: relative;
+        background: #fff;
+      }
+      .page:last-child {
+        page-break-after: auto;
+      }
+      h1 {
+        font-size: 30px;
+        margin: 0 0 6px;
+        color: #1d5ba5;
+      }
+      h2 {
+        font-size: 21px;
+        margin: 0 0 10px;
+        color: #1d5ba5;
+      }
+      h3 {
+        font-size: 16px;
+        margin: 14px 0 4px;
+      }
+      p {
+        margin: 6px 0;
+      }
+      .small {
+        font-size: 12.5px;
+        color: #56647a;
+      }
+      .cover {
+        background: linear-gradient(160deg, #0f3559 0%, #1d5ba5 60%, #2a6cb6 100%);
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .cover h1 {
+        color: #fff;
+        font-size: 40px;
+      }
+      .cover .tagline {
+        font-size: 18px;
+        opacity: 0.92;
+        margin-bottom: 26px;
+      }
+      .cover .card {
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 14px;
+        padding: 18px 20px;
+      }
+      .flow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 18px 0;
+      }
+      .flow .node {
+        background: #e6f0fa;
+        border: 1.5px solid #b9d2ea;
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+        text-align: center;
+        min-width: 112px;
+        color: #144a86;
+        font-weight: 600;
+      }
+      .flow .node.cdn {
+        background: #fff6e6;
+        border-color: #ecd39b;
+        color: #8a5a00;
+      }
+      .flow .arrow {
+        color: #1d5ba5;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .steps {
+        counter-reset: step;
+        margin: 8px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .steps > li {
+        counter-increment: step;
+        position: relative;
+        padding: 8px 0 8px 40px;
+        border-bottom: 1px dashed #d5e0ea;
+      }
+      .steps > li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 8px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #1d5ba5;
+        color: #fff;
+        font-weight: 700;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .box {
+        background: #f4f8fc;
+        border: 1px solid #d5e0ea;
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin: 12px 0;
+      }
+      .box.warn {
+        background: #fff7e8;
+        border-color: #ecd39b;
+      }
+      .img {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #d5e0ea;
+        margin: 8px 0 4px;
+        page-break-inside: avoid;
+      }
+      .img.tall {
+        width: 62%;
+        display: block;
+        margin: 8px auto 4px;
+      }
+      .caption {
+        font-size: 11.5px;
+        color: #56647a;
+        text-align: center;
+        margin: 0 0 10px;
+      }
+      .grid2 {
+        display: flex;
+        gap: 14px;
+      }
+      .grid2 > div {
+        flex: 1;
+      }
+      code,
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+        background: #eef3f8;
+        border: 1px solid #d5e0ea;
+        border-radius: 6px;
+        padding: 1px 6px;
+      }
+      .footer {
+        position: absolute;
+        left: 16mm;
+        right: 16mm;
+        bottom: 8mm;
+        display: flex;
+        justify-content: space-between;
+        font-size: 10.5px;
+        color: #8a97a8;
+        border-top: 1px solid #e4ebf2;
+        padding-top: 4px;
+      }
+      .mock {
+        border: 1.5px solid #b9c7d6;
+        border-radius: 12px;
+        overflow: hidden;
+        margin: 10px 0;
+      }
+      .mock-head {
+        background: #eef3f8;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 13px;
+        color: #144a86;
+        border-bottom: 1px solid #d5e0ea;
+      }
+      .mock-body {
+        padding: 12px 14px;
+        font-size: 13px;
+      }
+      .mock-row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin: 6px 0;
+      }
+      .mock-label {
+        width: 110px;
+        color: #56647a;
+        font-size: 12.5px;
+      }
+      .mock-input {
+        flex: 1;
+        border: 1.5px solid #d5e0ea;
+        border-radius: 8px;
+        padding: 7px 10px;
+        font-size: 12.5px;
+        color: #26405c;
+        background: #fbfdff;
+      }
+      .led {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #2f9e44;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ---------- 1. Cover ---------- -->
+    <div class="page cover">
+      <h1>Livecast</h1>
+      <p class="tagline">Come configurare una diretta, in modo semplice.</p>
+      <div class="card">
+        <p><b>Il flusso, semplificato:</b></p>
+        <div class="flow">
+          <div class="node">📹 OBS<br /><span class="small" style="color: #144a86">l'encoder</span></div>
+          <div class="arrow">→</div>
+          <div class="node">🖥️ VPS Livecast<br /><span class="small" style="color: #144a86">trasforma il video</span></div>
+          <div class="arrow">→</div>
+          <div class="node">📱 Link pubblico<br /><span class="small" style="color: #144a86">play / pausa</span></div>
+          <div class="arrow">→</div>
+          <div class="node">👥 Spettatori</div>
+          <div class="arrow">→</div>
+          <div class="node cdn">☁️ CDN<br /><span class="small">oltre ~500 spettatori</span></div>
+        </div>
+        <p class="small" style="color: #dbe9f7">
+          Il software è libero (MIT) e può essere rinominato: nome, colori e immagini si cambiano dal pannello, senza
+          toccare il codice.
+        </p>
+      </div>
+      <p class="small" style="margin-top: 30px; color: #cfe0f2">
+        Guida rapida · versione 1.0 · https://github.com/sdagostino777/livecast
+      </p>
+      <div class="footer" style="color: #cfe0f2; border-color: rgba(255,255,255,.25)">
+        <span>Livecast — guida rapida</span><span>1 / 5</span>
+      </div>
+    </div>
+
+    <!-- ---------- 2. What you need ---------- -->
+    <div class="page">
+      <h2>1. Cosa ti serve</h2>
+      <ul class="steps">
+        <li>
+          <b>OBS Studio</b> su un computer (Windows, macOS, Linux) — è il programma che invia il video. Gratuito,
+          <span class="mono">obsproject.com</span>.
+        </li>
+        <li>
+          <b>Un VPS</b> con Ubuntu (anche 4 GB di RAM bastano per una diretta) e un <b>dominio</b> con un record DNS
+          <span class="mono">A</span> che punta al VPS.
+        </li>
+        <li>Il repository Livecast e 5 minuti per l'installazione iniziale.</li>
+      </ul>
+
+      <h3>Installazione (una volta sola, da terminale)</h3>
+      <div class="box">
+        <p class="mono">git clone https://github.com/sdagostino777/livecast.git</p>
+        <p class="mono">cd livecast &amp;&amp; cp .deploy.env.example .deploy.env</p>
+        <p class="small">Scrivi dentro <span class="mono">.deploy.env</span> l'indirizzo del tuo server, poi:</p>
+        <p class="mono">APP_DOMAIN=live.tuodominio.it bash infra/scripts/deploy.sh --provision</p>
+      </div>
+      <p class="small">
+        Lo script installa tutto: server video (MediaMTX), encoder (FFmpeg), i servizi che riavviano da soli dopo un
+        guasto, nginx, il certificato HTTPS gratuito e l'utente <b>admin</b>. Alla fine stampa la password di admin:
+        <b>conservala in un posto sicuro</b>.
+      </p>
+
+      <div class="box warn">
+        <p class="small">
+          <b>Dopo l'installazione</b> apri <span class="mono">https://live.tuodominio.it/admin</span>, accedi con
+          <span class="mono">admin</span> e cambia subito la password (ingranaggio → Sicurezza).
+        </p>
+      </div>
+      <div class="footer"><span>Livecast — guida rapida</span><span>2 / 7</span></div>
+    </div>
+
+    <!-- ---------- 3. First login + create ---------- -->
+    <div class="page">
+      <h2>2. Primo accesso e creazione della diretta</h2>
+      <p>
+        Apri il link del pannello, inserisci utente e password. In alto a destra trovi l'ingranaggio (impostazioni) e
+        il tuo avatar con <b>Esci</b>.
+      </p>
+      <img class="img" src="../screenshots/login.png" style="max-height:66mm" alt="Schermata di accesso" />
+      <p class="caption">1. Schermata di accesso.</p>
+
+      <p>
+        Nel riquadro <b>Diretta</b> scrivi il titolo — per esempio <b>Congresso Regionale</b> o <b>Evento
+        semestrale</b> — scegli <b>Video</b> o <b>Solo audio</b> e premi <b>Crea e vai in onda</b>.
+      </p>
+      <img class="img" src="../screenshots/admin.png" style="max-height:90mm" alt="Pannello con la diretta creata" />
+      <p class="caption">2. Pannello: creazione e stato della diretta, con i LED di collegamento.</p>
+      <div class="footer"><span>Livecast — guida rapida</span><span>3 / 7</span></div>
+    </div>
+
+    <div class="page">
+      <h2>3. Impostazioni (l'ingranaggio)</h2>
+      <p>
+        Con l'ingranaggio (in alto a destra) si apre la pagina impostazioni: <b>Aspetto</b> (tema chiaro, scuro o
+        sistema), <b>Evento</b> (posta l'immagine che gli spettatori vedono prima di premere play e l'icona
+        quadrata), <b>Sicurezza</b> (la tua password) e <b>Utenti</b> (solo per l'admin).
+      </p>
+      <img class="img" src="../screenshots/admin-settings.png" style="max-height:100mm" alt="Pagina impostazioni" />
+      <p class="caption">2b. Impostazioni: tema, immagine evento, sicurezza, utenti.</p>
+      <div class="footer"><span>Livecast — guida rapida</span><span>3 / 5</span></div>
+    </div>
+
+    <!-- ---------- 4. Go live ---------- -->
+    <div class="page">
+      <h2>3. Andare in onda con OBS</h2>
+      <p>
+        Nel pannello premi <b>Mostra credenziali</b>: copia l'URL completo del server. In OBS →
+        <b>Impostazioni → Trasmissione</b>:
+      </p>
+      <div class="mock">
+        <div class="mock-head">OBS Studio — Impostazioni → Trasmissione</div>
+        <div class="mock-body">
+          <div class="mock-row">
+            <span class="mock-label">Servizio</span>
+            <span class="mock-input">Personalizzato…</span>
+          </div>
+          <div class="mock-row">
+            <span class="mock-label">Server</span>
+            <span class="mock-input">rtmp://live.tuodominio.it:1935/live?user=publisher&amp;pass=••••••</span>
+          </div>
+          <div class="mock-row">
+            <span class="mock-label">Chiave stream</span>
+            <span class="mock-input"><i>(vuota)</i></span>
+          </div>
+        </div>
+      </div>
+      <p>
+        Premi <b>Avvia trasmissione</b> in OBS: in pochi secondi il pannello passa a <b>In onda</b>. Copia il link
+        della diretta e condividilo. Gli spettatori vedono il poster e il pulsante play: da lì solo play e pausa.
+      </p>
+      <img class="img" src="../screenshots/player-poster.png" style="max-height:95mm" alt="Player prima del play, con il poster dell'evento" />
+      <p class="caption">4. Prima del play: il poster dell'evento e il pulsante play.</p>
+      <div class="footer"><span>Livecast — guida rapida</span><span>5 / 7</span></div>
+    </div>
+
+    <div class="page">
+      <h2>4. Cosa vede lo spettatore</h2>
+      <p>
+        Durante la diretta: play e pausa, il badge <b>LIVE</b> e il titolo. Niente altro — ogni comando in più è
+        un'occasione di errore su un telefono in mezzo a una folla.
+      </p>
+      <img class="img" src="../screenshots/player.png" style="max-height:95mm" alt="Player con il video in onda" />
+      <p class="caption">5. Il player: solo play e pausa, come deve essere.</p>
+      <img class="img" src="../screenshots/audio.png" alt="Player solo audio" style="max-height: 78mm" />
+      <p class="caption">6. Una diretta «Solo audio»: stessa semplicità, con la card audio.</p>
+      <div class="footer"><span>Livecast — guida rapida</span><span>6 / 7</span></div>
+    </div>
+
+    <!-- ---------- 5. Capacity / CDN / redundancy ---------- -->
+    <div class="page">
+      <h2>5. Spettatori, CDN e imprevisti</h2>
+      <div class="box">
+        <p class="small">
+          <b>Quanti spettatori regge il VPS?</b> Fino a <b>~500 simultanei</b> basta il VPS da solo. Oltre serve una
+          CDN: nel pannello → <b>Configurazione</b> inserisci l'URL della CDN e controlla che il LED accanto
+          <span class="led"></span> diventi <b style="color: #2f9e44">verde</b>. Con la CDN gli spettatori caricano i
+          video dall'edge e il VPS resta leggero.
+        </p>
+      </div>
+      <img class="img" src="../screenshots/admin-failover.png" style="max-height:80mm" alt="Pannello durante un failover" />
+      <p class="caption">5. LED verdi = collegamenti attivi. «In uso: backup» = il secondo encoder è subentrato.</p>
+
+      <h3>Imprevisti: cosa succede</h3>
+      <ul class="steps">
+        <li>
+          <b>OBS si disconnette</b> → la regia riparte da sola in pochi secondi; quando OBS si riconnette il video
+          torna.
+        </li>
+        <li>
+          <b>L'encoder principale muore</b> → se hai un secondo encoder collegato all'URL di backup, il pannello
+          mostra «In uso: backup» e la diretta continua.
+        </li>
+        <li>
+          <b>Il server si guasta</b> → nessun software sul server può salvarlo: serve un secondo VPS di riserva con i
+          dati (la cartella <span class="mono">DATA_DIR</span>) e il DNS reindirizzato. È il piano di emergenza da
+          preparare per eventi importanti.
+        </li>
+      </ul>
+
+      <h3>Dove trovare il resto</h3>
+      <p class="small">
+        README (inglese) · <b>docs/RUNBOOK.md</b> (operatività, CDN, soccorso) · <b>docs/CDN.md</b> (Bunny CDN passo
+        passo) · <b>docs/guides/guide-en.pdf</b> (questa guida in inglese).
+      </p>
+      <div class="footer"><span>Livecast — guida rapida</span><span>7 / 7</span></div>
+    </div>
+  </body>
+</html>

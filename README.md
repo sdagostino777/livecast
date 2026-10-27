@@ -39,6 +39,8 @@ code is organised around failure, not around convenience. See
 | **No PIN on the link** | By decision: an open transmission. The slug is random and unindexed, which keeps it out of search results without pretending it is access control. |
 | **Two kinds of broadcast** | Video (720/480/360 ladder) and audio-only (128 kbps AAC) share the same pipeline; the audio mode drops any video the publisher sends instead of paying for an encoder chain nobody watches. |
 | **Users, not just an account** | One admin manages accounts; operators can run broadcasts. The admin account itself cannot be deleted or have its password reset by anyone else. |
+| **Event poster and icon** | Each broadcast carries a 16:9 poster (what viewers see before pressing play) and a square icon (lists), uploaded from the panel. |
+| **Light / dark / system** | The panel follows a theme preference; the player stays dark on purpose. |
 | **SQLite** | One operator, a handful of streams. A database server would be a process to keep alive for no benefit. |
 
 ## Quick start (local)
@@ -87,8 +89,11 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 - **Diretta** — create a broadcast, "Crea e vai in onda", stop it, and copy the
   public link. OBS credentials are masked until revealed (the reveal is audited).
-- **Dirette** — previous broadcasts with their kind (video / audio-only); each
-  row keeps its link. Deleted rows never own files on disk.
+- **Dirette** — previous broadcasts with their kind (video / audio-only), poster
+  thumbnail and link. Deleted rows never own files on disk.
+- **⚙ Impostazioni** — the gear opens a page with **Aspetto** (light / dark /
+  system), **Evento** (poster and icon with previews), **Sicurezza** (password)
+  and, for admins, **Utenti**. The avatar top-right holds the role and *Esci*.
 - **Utenti** (admin only) — create operators, reset their passwords, delete them.
   The admin account row shows "account protetto" and has no actions.
 - **Configurazione** — public URL, **CDN base URL, ingest host/port**: switching
@@ -175,6 +180,19 @@ already connected, and the panel simply switches "In uso" — the broadcast does
 not stop, it restarts from the other publisher within about three seconds.
 
 ![The panel during a failover: backup input in use](docs/screenshots/admin-failover.png)
+
+## Guides
+
+Two illustrated quick-start guides — install once, create a broadcast, go live
+from OBS, attach a CDN, survive the unexpected. Same content, two languages:
+
+| | |
+| --- | --- |
+| 🇮🇹 [Guida rapida — Italiano (PDF)](docs/guides/guide-it.pdf) | [HTML source](docs/guides/guide-it.html) |
+| 🇬🇧 [Quick guide — English (PDF)](docs/guides/guide-en.pdf) | [HTML source](docs/guides/guide-en.html) |
+
+The PDFs are generated from the HTML with headless Chrome (`page.pdf`), so the
+guides can be edited as plain HTML and re-printed without a design tool.
 
 ## Tests
 
