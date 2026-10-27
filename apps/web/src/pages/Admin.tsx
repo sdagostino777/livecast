@@ -322,7 +322,10 @@ function ObsPanel({ ov }: { ov: Overview | null }) {
         {!ov.ingest.reachable && <span className="muted small">(server media non raggiungibile)</span>}
       </div>
 
-      <p className="muted small">In OBS imposta Server e lascia vuota la Stream Key:</p>
+      <p className="muted small">
+        In OBS: <b>Server</b> = l'URL completo con credenziali (pulsante sotto), <b>Stream Key</b> vuota.
+      </p>
+      <p className="muted small mono ellipsis">Base: {ov.ingest.server}</p>
       <div className="code-row">
         <code className="code">{ov.ingest.server}</code>
         <button className="btn btn-ghost btn-small" onClick={() => void copyToClipboard(ov.ingest.server).then(() => undefined)}>

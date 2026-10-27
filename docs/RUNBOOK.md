@@ -118,6 +118,26 @@ Admin password reset (e.g. forgotten password): run on the VPS
 `cd /srv/ndx-live/app && node --env-file=.env apps/api/dist/cli.js reset-password --username admin`
 — it prints a new password and invalidates all sessions.
 
+## Moving to another VPS or domain
+
+Everything that describes *this* install (public URL, CDN, ingest host) is in
+the panel, but the two things that describe *the machine* are deploy-time
+parameters:
+
+```bash
+# provision a second VPS with the same code
+SSH_HOST=root@203.0.113.10 SSH_KEY=~/.ssh/other_vps \
+  bash infra/scripts/deploy.sh --provision
+
+# or keep the SSH config and only change the domain
+APP_DOMAIN=live.example.com bash infra/scripts/deploy.sh --provision
+```
+
+After the first deploy: in **Configurazione** set the new public URL, the CDN (if
+any) and the ingest host, then create the broadcast. No code changes, no data
+migration for a fresh event — the SQLite file under `DATA_DIR` is the only state,
+and copying `DATA_DIR` moves it.
+
 ## Data retention
 
 - `DATA_DIR/ndx-live.db` — users, sessions, streams, settings, audit log.
