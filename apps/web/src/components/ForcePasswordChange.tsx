@@ -10,7 +10,7 @@ import { BrandMark } from "../components/BrandMark";
  */
 export function ForcePasswordChange({ username, isAdmin }: { username: string; isAdmin: boolean }) {
   const brand = useBrand();
-  const [currentPassword, setCurrentPassword] = useState(isAdmin ? "Admin" : "");
+  const [currentPassword, setCurrentPassword] = useState(isAdmin ? "admin" : "");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);

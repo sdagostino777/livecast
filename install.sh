@@ -12,7 +12,7 @@
 #
 # It does everything: dependencies, media server, encoder, services, TLS,
 # firewall and the admin account. Then open https://<domain>/admin and sign in
-# with admin / Admin — the panel forces a new password immediately.
+# with admin / admin — the panel forces a new password immediately.
 set -euo pipefail
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -48,7 +48,7 @@ cat <<MSG
 \033[1;32mLivecast è installato.\033[0m
 
   1. Apri  https://${APP_DOMAIN}/admin
-  2. Accedi con  utente: admin   password: Admin
+  2. Accedi con  utente: admin   password: admin
   3. Il pannello ti obbliga a scegliere una nuova password: fallo subito.
   4. Crea la diretta (titolo, immagine, video o solo audio) e premi "Vai in onda".
      Puoi pubblicare dalla camera del browser oppure con OBS (il pannello mostra l'URL).

@@ -42,7 +42,7 @@ code is organised around failure, not around convenience. See
 | **Event poster and icon** | Each broadcast carries a 16:9 poster (what viewers see before pressing play) and a square icon (lists), uploaded from the panel. |
 | **Light / dark / system** | The panel follows a theme preference; the player stays dark on purpose. |
 | **Publishing without OBS** | Camera or screen share straight from the panel over WebRTC (WHIP); OBS stays supported for long events. |
-| **First-run safety** | The default `admin / Admin` account must change its password before the panel does anything else. |
+| **First-run safety** | The default `admin / admin` account must change its password before the panel does anything else. |
 | **SQLite** | One operator, a handful of streams. A database server would be a process to keep alive for no benefit. |
 
 ## Quick start (local)
@@ -76,7 +76,7 @@ bash install.sh live.yourdomain.com
 That is the whole installation: dependencies, media server, encoder, the systemd
 units that restart themselves, nginx, free HTTPS, the firewall and the admin
 account. Then open `https://live.yourdomain.com/admin`, sign in as
-**admin / Admin** — the panel forces a new password immediately.
+**admin / admin** — the panel forces a new password immediately.
 
 No OBS is required: the panel can publish from the camera or a shared screen
 (WebRTC over WHIP). The page must stay open while publishing; for long events
