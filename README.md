@@ -1,5 +1,15 @@
 # Livecast
 
+<p>
+  <a href="https://github.com/sdagostino777/livecast/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/sdagostino777/livecast/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2a6cb6" />
+  <img alt="Node 22" src="https://img.shields.io/badge/node-22-2a6cb6" />
+  <img alt="HLS + audio-only" src="https://img.shields.io/badge/HLS%20%2B%20audio--only-self--hosted-1d7a8c" />
+  <img alt="No external services required" src="https://img.shields.io/badge/dependencies-none%20required-4ec3a7" />
+</p>
+
+![Livecast — adaptive HLS live audio and video, self-hosted: the panel and the link a viewer opens](docs/screenshots/hero.png)
+
 **Self-hostable live audio/video streaming.** A small team broadcasts from the browser or an external encoder;
 the audience gets a shareable link and a player with play and pause. Adaptive
 HLS for video, a clean audio-only mode, and a control plane small enough to read
@@ -12,8 +22,6 @@ Built as the streaming layer for the maintainers events. The driving constraint 
 features: it was *"the transmission must not fall during the event"* — so the
 code is organised around failure, not around convenience. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break).
-
-![The player — play and pause, nothing else](docs/screenshots/player.png)
 
 *Every screenshot in this repository is a capture of a real broadcast, taken by
 Playwright through a real Chrome instance — no mock-ups.*
@@ -114,6 +122,8 @@ a broadcast from the panel and press play on `/live/<slug>`.
 - **Link della diretta** — copyable from the first moment: whoever opens it sees
   the event name and artwork before pressing play, and messaging apps show the
   same preview thanks to the Open Graph tags the server renders for `/live/<slug>`.
+
+![What the viewer gets — the event poster, one play button, nothing else](docs/screenshots/player.png)
 - **Tema** — three small icons in the header (light, dark, system), one tap each.
   The player stays dark: video on a bright page is tiring to watch.
 - **Impostazioni** (account menu) — **Configurazione** (service name, logo — which
