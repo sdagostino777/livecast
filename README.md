@@ -10,6 +10,8 @@ features: it was *"the transmission must not fall during the event"* — so the
 code is organised around failure, not around convenience. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#redundancy-what-holds-when-things-break.md).
 
+![The player — play and pause, nothing else](docs/screenshots/player.png)
+
 ```
  OBS ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
                          │
@@ -73,6 +75,8 @@ a broadcast from the panel and press play on `/live/<slug>`.
 
 ## The panel in one screen
 
+![The panel while live](docs/screenshots/admin.png)
+
 - **Diretta** — create a broadcast, "Crea e vai in onda", stop it, and copy the
   public link. OBS credentials are masked until revealed (the reveal is audited).
 - **Dirette** — previous broadcasts; each row keeps its link. Deleted rows never
@@ -124,6 +128,12 @@ pnpm build            # api → dist, web → dist
 The FFmpeg argument list is asserted in tests and exercised end-to-end by a real
 encoder smoke script, because the flags are the part of this system most likely
 to rot silently.
+
+The player itself was verified in Chromium through Playwright against a real
+MediaMTX → FFmpeg → HLS chain: the LIVE badge renders, pressing play moves
+`video.currentTime` forward with no console errors, the single control toggles
+pause and resume, and the same flow was captured on a 390 px mobile viewport
+([`docs/screenshots/player-mobile.png`](docs/screenshots/player-mobile.png)).
 
 ## Layout
 
