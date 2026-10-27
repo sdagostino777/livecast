@@ -26,6 +26,12 @@ code is organised around failure, not around convenience. See
 *Every screenshot in this repository is a capture of a real broadcast, taken by
 Playwright through a real Chrome instance — no mock-ups.*
 
+<sub>Sharing this repository? The link preview (WhatsApp, LinkedIn, Slack) uses
+GitHub's **social preview**: `Settings → General → Social preview` → upload
+[`docs/screenshots/social-preview.png`](docs/screenshots/social-preview.png)
+(1280×640, under 1 MB). The README banner above is never used by link previews —
+those read the page metadata, not the markdown.</sub>
+
 ```
  encoder ──RTMP:1935──▶ MediaMTX (ingest, loopback-only readers)
                          │
