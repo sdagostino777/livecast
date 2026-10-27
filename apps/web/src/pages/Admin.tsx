@@ -455,14 +455,14 @@ export function Admin() {
                     disabled={busy}
                     onClick={() => void publishFromBrowser("camera")}
                   >
-                    Pubblica da camera
+                    Collega camera
                   </button>
                   <button
                     className="btn btn-ghost btn-small"
                     disabled={busy}
                     onClick={() => void publishFromBrowser("screen")}
                   >
-                    Condividi schermo
+                    Collega schermo
                   </button>
                 </div>
               ) : (
