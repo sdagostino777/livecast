@@ -158,6 +158,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       // index.html for real asset paths only by accident.
       wildcard: false,
       decorateReply: true,
+      setHeaders(res, filePath) {
+        // index.html names the hashed bundles: caching it means a deploy can be
+        // invisible to a browser that already has the old page. Assets are
+        // content-addressed and safe to cache forever.
+        if (filePath.endsWith("index.html")) {
+          res.setHeader("Cache-Control", "no-store");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
     });
     app.setNotFoundHandler((req, reply) => {
       if (req.method !== "GET" && req.method !== "HEAD") {

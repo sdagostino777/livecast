@@ -58,6 +58,7 @@ export function Admin() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [posterTarget, setPosterTarget] = useState<string | null>(null);
   const posterInput = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -179,6 +180,11 @@ export function Admin() {
     }
   }
 
+  function pickPoster(streamId: string) {
+    setPosterTarget(streamId);
+    posterInput.current?.click();
+  }
+
   if (!me) {
     return (
       <div className="loading-page">
@@ -188,9 +194,24 @@ export function Admin() {
   }
 
   const active = ov?.stream ?? null;
+  // The dashboard always shows the most recent broadcast — live, draft or
+  // ended — because that is the one an operator is preparing or has just run.
+  const current = active ?? streams[0] ?? null;
 
   return (
     <div className="admin">
+      <input
+        ref={posterInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file && posterTarget) void uploadPoster(posterTarget, file);
+          event.target.value = "";
+        }}
+      />
+
       <header className="admin-top">
         <BrandMark name={brand} />
         <div className="admin-user">
@@ -231,21 +252,27 @@ export function Admin() {
       <section className="card">
         <div className="card-head">
           <h2>Diretta</h2>
-          <span className={`pill ${ov?.stream?.status ?? "off"}`}>{statusLabel(ov)}</span>
+          <span className={`pill ${active ? (ov?.stream?.status ?? "") : current ? "draft" : "off"}`}>
+            {active ? statusLabel(ov) : current ? (current.status === "draft" ? "Bozza" : "Terminata") : "Offline"}
+          </span>
         </div>
 
-        {active ? (
+        {current ? (
           <div className="stack">
             <div className="row-between">
               <div className="row" style={{ alignItems: "flex-start" }}>
-                {active.posterUrl && <img className="thumb poster-thumb" src={active.posterUrl} alt="" />}
+                {current.posterUrl ? (
+                  <img className="thumb poster-thumb" src={current.posterUrl} alt="" />
+                ) : (
+                  <span className="thumb poster-thumb placeholder" aria-hidden />
+                )}
                 <div>
                   {editingTitle ? (
                     <form
                       className="row wrap"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        void patchTitle(active.id, titleDraft);
+                        void patchTitle(current.id, titleDraft);
                       }}
                     >
                       <input
@@ -264,56 +291,60 @@ export function Admin() {
                     </form>
                   ) : (
                     <>
-                      <p className="stream-title">{active.title}</p>
+                      <p className="stream-title">{current.title}</p>
                       <p className="muted small mono">
-                        {active.slug} · {kindLabel(active.kind)}
+                        {current.slug} · {kindLabel(current.kind)}
                       </p>
                     </>
                   )}
                 </div>
               </div>
               <div className="row wrap">
-                <input
-                  ref={posterInput}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  style={{ display: "none" }}
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void uploadPoster(active.id, file);
-                    event.target.value = "";
-                  }}
-                />
-                <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => posterInput.current?.click()}>
-                  {active.posterUrl ? "Cambia immagine" : "Carica immagine"}
+                <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => pickPoster(current.id)}>
+                  {current.posterUrl ? "Cambia immagine" : "Carica immagine"}
                 </button>
                 <button
                   className="btn btn-ghost btn-small"
                   disabled={busy}
                   onClick={() => {
-                    setTitleDraft(active.title);
+                    setTitleDraft(current.title);
                     setEditingTitle(true);
                   }}
                 >
                   Modifica
                 </button>
-                <button
-                  className="btn btn-ghost btn-small"
-                  onClick={() => void copyToClipboard(active.pageUrl).then(() => notify("Link copiato."))}
-                >
-                  Copia link
-                </button>
-                <button className="btn btn-danger btn-small" disabled={busy} onClick={() => void stopStream(active.id)}>
-                  Termina
-                </button>
+                {current.status !== "draft" && (
+                  <button
+                    className="btn btn-ghost btn-small"
+                    onClick={() => void copyToClipboard(current.pageUrl).then(() => notify("Link copiato."))}
+                  >
+                    Copia link
+                  </button>
+                )}
+                {active ? (
+                  <button className="btn btn-danger btn-small" disabled={busy} onClick={() => void stopStream(active.id)}>
+                    Termina
+                  </button>
+                ) : (
+                  <button className="btn btn-primary btn-small" disabled={busy} onClick={() => void startStream(current.id)}>
+                    Vai in onda
+                  </button>
+                )}
               </div>
             </div>
 
-            <p className="muted small">
-              In onda dalle {formatTime(active.startedAt)} · {active.record ? "registrazione attiva" : "nessuna registrazione"}
-            </p>
+            {active && (
+              <p className="muted small">
+                In onda dalle {formatTime(active.startedAt)} · {active.record ? "registrazione attiva" : "nessuna registrazione"}
+              </p>
+            )}
+            {!current.posterUrl && (
+              <p className="muted small">
+                Carica l'immagine evento: è quello che gli spettatori vedono prima di premere play.
+              </p>
+            )}
 
-            <ObsPanel ov={ov} />
+            {active && <ObsPanel ov={ov} />}
           </div>
         ) : (
           <div className="stack">
@@ -367,6 +398,9 @@ export function Admin() {
                   </td>
                   <td className="muted small">{formatDate(s.createdAt)}</td>
                   <td className="cell-actions">
+                    <button className="btn btn-ghost btn-small" disabled={busy} onClick={() => pickPoster(s.id)}>
+                      Immagine
+                    </button>
                     {!active && (s.status === "draft" || s.status === "ended") && (
                       <button className="btn btn-primary btn-small" disabled={busy} onClick={() => void startStream(s.id)}>
                         Vai in onda

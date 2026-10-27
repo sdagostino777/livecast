@@ -1107,8 +1107,10 @@ h2 {
   height: 40px;
 }
 
-.icon-thumb.placeholder {
+.icon-thumb.placeholder,
+.thumb.placeholder {
   border-style: dashed;
+  background: var(--surface-2);
 }
 
 .player-poster {
