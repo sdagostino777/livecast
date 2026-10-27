@@ -99,7 +99,13 @@ log "source synced (${SYNC_MODE})"
 
 if [ "${PROVISION}" -eq 1 ]; then
   log "Provisioning (MediaMTX, systemd, nginx, TLS, firewall)"
-  ${SSH} "bash ${APP_DIR}/infra/scripts/provision.sh"
+  # Forward the install parameters over ssh: environment variables set on the
+  # laptop do not travel by themselves, and provisioning for the wrong domain
+  # installs an nginx site nobody asked for.
+  PROVISION_ENV="APP_NAME=${APP_NAME}"
+  [ -n "${APP_DOMAIN:-}" ] && PROVISION_ENV="${PROVISION_ENV} APP_DOMAIN=${APP_DOMAIN}"
+  [ -n "${LETSENCRYPT_EMAIL:-}" ] && PROVISION_ENV="${PROVISION_ENV} LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
+  ${SSH} "${PROVISION_ENV} bash ${APP_DIR}/infra/scripts/provision.sh"
 fi
 
 # --- 4. Build on the server -------------------------------------------------
