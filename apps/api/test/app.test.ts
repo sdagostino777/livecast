@@ -571,7 +571,7 @@ describe("admin + public stream lifecycle", () => {
       method: "POST",
       url: "/api/admin/streams",
       headers: { cookie },
-      payload: { title: "Congresso Regionale", kind: "video" },
+      payload: { title: "Congresso Internazionale 2027 — Bologna", kind: "video" },
     });
     const stream = created.json().stream;
 
@@ -580,10 +580,10 @@ describe("admin + public stream lifecycle", () => {
       method: "PATCH",
       url: `/api/admin/streams/${stream.id}`,
       headers: { cookie },
-      payload: { title: "Congresso Regionale 2027", posterPalette: "teal" },
+      payload: { title: "Congresso Internazionale 2027 — Bologna", posterPalette: "teal" },
     });
     expect(renamedEarly.statusCode).toBe(200);
-    expect(renamedEarly.json().stream.title).toBe("Congresso Regionale 2027");
+    expect(renamedEarly.json().stream.title).toBe("Congresso Internazionale 2027 — Bologna");
     expect(renamedEarly.json().stream.posterPalette).toBe("teal");
 
     await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
@@ -630,7 +630,7 @@ describe("admin + public stream lifecycle", () => {
       method: "PATCH",
       url: `/api/admin/streams/${stream.id}`,
       headers: { cookie },
-      payload: { title: "Congresso Regionale 2027 — replica" },
+      payload: { title: "Congresso Internazionale 2027 — Bologna — replica" },
     });
     expect(renamedEnded.statusCode).toBe(200);
   });
@@ -690,13 +690,30 @@ describe("admin + public stream lifecycle", () => {
     expect(reuse.statusCode).toBe(401);
   });
 
+  it("keeps every word of a long event title on the poster", async () => {
+    const cookie = await login();
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/streams",
+      headers: { cookie },
+      payload: { title: "Congresso Internazionale 2027 — Bologna" },
+    });
+    const stream = created.json().stream;
+    const poster = await app.inject({ method: "GET", url: `/api/poster/${stream.slug}` });
+    expect(poster.statusCode).toBe(200);
+    // The two-line poster used to drop the tail of a long title.
+    for (const word of ["Congresso", "Internazionale", "2027", "Bologna"]) {
+      expect(poster.body).toContain(word);
+    }
+  });
+
   it("generates poster artwork when no image was uploaded", async () => {
     const cookie = await login();
     const created = await app.inject({
       method: "POST",
       url: "/api/admin/streams",
       headers: { cookie },
-      payload: { title: "Congresso Regionale 2027" },
+      payload: { title: "Congresso Internazionale 2027 — Bologna" },
     });
     const stream = created.json().stream;
     expect(stream.fallbackPosterUrl).toBe(`/api/poster/${stream.slug}`);

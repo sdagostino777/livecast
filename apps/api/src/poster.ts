@@ -38,29 +38,51 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-/** Splits a title into at most two balanced lines for the 16:9 poster. */
-function wrapTitle(title: string, maxChars = 22): string[] {
+/**
+ * Wraps a title to a line width, without ever losing a word.
+ *
+ * The previous version stopped after two lines, which silently truncated long
+ * event names ("Congresso Internazionale 2027 — Bologna" lost its city). Words
+ * are the unit: a title that needs more room gets a smaller font instead.
+ */
+function wrapTitle(title: string, maxChars: number, maxLines = 3): string[] {
   const words = title.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [title];
+
   const lines: string[] = [];
   let current = "";
   for (const word of words) {
-    if (!current) current = word;
-    else if (`${current} ${word}`.length <= maxChars) current += ` ${word}`;
-    else {
-      lines.push(current);
+    if (!current) {
       current = word;
+      continue;
     }
-    if (lines.length === 2) break;
+    if (`${current} ${word}`.length <= maxChars) {
+      current += ` ${word}`;
+      continue;
+    }
+    lines.push(current);
+    current = word;
   }
-  if (current && lines.length < 2) lines.push(current);
-  if (lines.length === 0) lines.push(title);
-  return lines.slice(0, 2);
+  if (current) lines.push(current);
+
+  if (lines.length <= maxLines) return lines;
+
+  // Only a title longer than the artwork can hold is clipped, and it says so.
+  const kept = lines.slice(0, maxLines);
+  kept[maxLines - 1] = `${kept[maxLines - 1]}…`;
+  return kept;
+}
+
+/** Font size and line width that fit a title of this length. */
+function titleFit(title: string): { fontSize: number; lines: string[] } {
+  const length = title.trim().length;
+  const plan = length <= 14 ? { fontSize: 76, maxChars: 14 } : length <= 30 ? { fontSize: 66, maxChars: 20 } : length <= 46 ? { fontSize: 58, maxChars: 24 } : { fontSize: 48, maxChars: 30 };
+  return { fontSize: plan.fontSize, lines: wrapTitle(title, plan.maxChars) };
 }
 
 export function posterSvg(opts: { title: string; brand: string; seed: string; palette?: string | null }): string {
   const palette = paletteByName(opts.palette) ?? paletteFor(opts.seed);
-  const lines = wrapTitle(opts.title);
-  const fontSize = lines.some((line) => line.length > 16) ? 62 : 76;
+  const { fontSize, lines } = titleFit(opts.title);
   const lineHeight = fontSize * 1.18;
   const startY = 360 - ((lines.length - 1) * lineHeight) / 2;
   const text = lines
@@ -100,8 +122,9 @@ export function posterSvg(opts: { title: string; brand: string; seed: string; pa
 export function overlaySvg(opts: { imageHref: string; title: string; brand: string }): string {
   // `imageHref` is a data: URI on purpose: an SVG loaded through <img> cannot
   // fetch external subresources, so a linked /uploads/… path renders empty.
-  const lines = wrapTitle(opts.title);
-  const fontSize = lines.some((line) => line.length > 18) ? 54 : 66;
+  const fit = titleFit(opts.title);
+  const lines = fit.lines;
+  const fontSize = Math.min(fit.fontSize, 62);
   const lineHeight = fontSize * 1.16;
   const firstY = 616 - ((lines.length - 1) * lineHeight);
   const text = lines

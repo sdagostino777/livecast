@@ -725,7 +725,7 @@ function BroadcastConfig({
       <div className="row wrap">
         <input
           className="input grow"
-          placeholder="Titolo — es. Congresso Regionale / Evento semestrale"
+          placeholder="Titolo — es. Congresso Internazionale 2027 — Bologna"
           value={titleDraft}
           maxLength={120}
           autoFocus
