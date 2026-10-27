@@ -114,17 +114,18 @@ a broadcast from the panel and press play on `/live/<slug>`.
 - **Link della diretta** — copyable from the first moment: whoever opens it sees
   the event name and artwork before pressing play, and messaging apps show the
   same preview thanks to the Open Graph tags the server renders for `/live/<slug>`.
-- **⚙ Impostazioni** — the gear opens a page with **Identità** (service name and
-  logo, yours), **Aspetto** (light / dark / system), **Evento** (poster, icon and
-  "show the event name over the image"), **Sicurezza** (password) and, for
-  admins, **Utenti**. The account button top-right holds the role and *Esci*.
+- **Tema** — three small icons in the header (light, dark, system), one tap each.
+  The player stays dark: video on a bright page is tiring to watch.
+- **Impostazioni** (account menu) — **Configurazione** (service name, logo — which
+  also becomes the browser tab icon —, public URL, CDN, ingest host/port),
+  **Sicurezza** (password, recovery codes), **Utenti** (admin only) and
+  **Manutenzione** (kill a stuck broadcast, read the logs).
 - **Utenti** (admin only) — create operators, reset their passwords, delete them.
   The admin account row shows "account protetto" and has no actions.
-- **Configurazione** — public URL, **CDN base URL, ingest host/port**: switching
-  delivery to a CDN is a URL and a click, no redeploy. "Verifica CDN" probes the
-  live manifest through the CDN edge and reports the cache header it saw. The
-  step-by-step attach procedure is [`docs/CDN.md`](docs/CDN.md).
-- **Sicurezza** — change your own password (revokes your other sessions).
+- **CDN** — switching delivery to an edge is a URL and a click inside
+  **Configurazione**, no redeploy. "Verifica CDN" probes the live manifest through
+  the CDN and reports the cache header it saw. The step-by-step attach procedure
+  is [`docs/CDN.md`](docs/CDN.md).
 
 ## Make it yours
 
