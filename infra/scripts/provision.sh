@@ -190,17 +190,33 @@ if [ ! -f "/etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem" ]; then
   nginx -t >/dev/null 2>&1 && systemctl reload nginx
   ok "HTTP bootstrap site active"
 
-  certbot certonly --webroot -w /var/www/html -d "${APP_DOMAIN}" \
-    --email "${LETSENCRYPT_EMAIL}" --agree-tos --no-eff-email -n \
-    || fail "certbot failed — is the A record for ${APP_DOMAIN} pointing at this server?"
-  ok "certificate issued"
+  if certbot certonly --webroot -w /var/www/html -d "${APP_DOMAIN}" \
+    --email "${LETSENCRYPT_EMAIL}" --agree-tos --no-eff-email -n; then
+    ok "certificate issued"
+  else
+    # Not fatal on purpose: everything else — MediaMTX, systemd units, the app —
+    # is usable, and the only missing prerequisite is usually the DNS record,
+    # which is a five-minute manual step outside this script.
+    warn "certbot could not issue a certificate for ${APP_DOMAIN}."
+    warn "Most likely cause: no DNS A record for ${APP_DOMAIN} pointing at this VPS."
+    warn "The app keeps working over HTTP on this host until then."
+    warn "After adding the record, re-run: bash infra/scripts/deploy.sh --provision"
+  fi
 fi
 
-render "${NGINX_SRC}/live.conf" > "${SITE}"
-ln -sf "${SITE}" "/etc/nginx/sites-enabled/${APP_DOMAIN}.conf"
-nginx -t >/dev/null
-systemctl reload nginx
-ok "https site for ${APP_DOMAIN} active"
+if [ -f "/etc/letsencrypt/live/${APP_DOMAIN}/fullchain.pem" ]; then
+  render "${NGINX_SRC}/live.conf" > "${SITE}"
+  ln -sf "${SITE}" "/etc/nginx/sites-enabled/${APP_DOMAIN}.conf"
+  nginx -t >/dev/null
+  systemctl reload nginx
+  ok "https site for ${APP_DOMAIN} active"
+else
+  render "${NGINX_SRC}/live.http.conf" > "${SITE}"
+  ln -sf "${SITE}" "/etc/nginx/sites-enabled/${APP_DOMAIN}.conf"
+  nginx -t >/dev/null
+  systemctl reload nginx
+  warn "http-only site for ${APP_DOMAIN} active (no certificate yet)"
+fi
 
 # --- 8. Summary ------------------------------------------------------------
 
