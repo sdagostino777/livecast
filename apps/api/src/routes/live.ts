@@ -27,7 +27,7 @@ export async function liveRoutes(app: FastifyInstance): Promise<void> {
       .header("content-type", "image/svg+xml; charset=utf-8")
       .header("cache-control", "public, max-age=300")
       .header("x-robots-tag", "noindex");
-    return posterSvg({ title: row.title, brand: app.settings.get().brandName, seed: row.slug });
+    return posterSvg({ title: row.title, brand: app.settings.get().brandName, seed: row.slug, palette: row.poster_palette });
   });
 
   app.get("/api/live/:slug", async (req, reply) => {

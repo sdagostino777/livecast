@@ -108,13 +108,24 @@ export function AdminSettings() {
 
       <ThemeSection />
 
-      <EventImagesSection latest={latest} busy={busy} onUpload={(kind, file) => {
+      <EventImagesSection
+        latest={latest}
+        busy={busy}
+        onPalette={(palette) => {
+          if (!latest) return;
+          void act(async () => {
+            await api.patch(`/api/admin/streams/${latest.id}`, { posterPalette: palette });
+            notify("Palette aggiornata.");
+          });
+        }}
+        onUpload={(kind, file) => {
         if (!latest) return;
-        void act(async () => {
-          await uploadStreamImage(latest.id, kind, file);
-          notify(kind === "poster" ? "Poster aggiornato." : "Icona aggiornata.");
-        });
-      }} onRemove={(kind) => {
+          void act(async () => {
+            await uploadStreamImage(latest.id, kind, file);
+            notify(kind === "poster" ? "Poster aggiornato." : "Icona aggiornata.");
+          });
+        }}
+        onRemove={(kind) => {
         if (!latest) return;
         void act(async () => {
           await api.del(`/api/admin/streams/${latest.id}/${kind}`);
@@ -187,16 +198,26 @@ function ThemeSection() {
   );
 }
 
+const PALETTES: Array<{ value: string; label: string; css: string }> = [
+  { value: "blue", label: "Blu", css: "linear-gradient(135deg,#0f3559,#2a6cb6)" },
+  { value: "teal", label: "Petrolio", css: "linear-gradient(135deg,#0b3b4a,#1d7a8c)" },
+  { value: "indigo", label: "Indaco", css: "linear-gradient(135deg,#1e1a4d,#4f46a5)" },
+  { value: "slate", label: "Ardesia", css: "linear-gradient(135deg,#12212e,#3f6076)" },
+  { value: "plum", label: "Prugna", css: "linear-gradient(135deg,#3a1f3d,#8d4a63)" },
+];
+
 function EventImagesSection({
   latest,
   busy,
   onUpload,
   onRemove,
+  onPalette,
 }: {
   latest: StreamView | null;
   busy: boolean;
   onUpload: (kind: "poster" | "icon", file: File) => void;
   onRemove: (kind: "poster" | "icon") => void;
+  onPalette: (palette: string | null) => void;
 }) {
   const posterRef = useRef<HTMLInputElement | null>(null);
   const iconRef = useRef<HTMLInputElement | null>(null);
@@ -217,7 +238,35 @@ function EventImagesSection({
               <b>Poster</b> (16:9): compare al posto del video prima che lo spettatore premi play.
             </p>
             <img className="upload-preview poster-preview" src={posterSrc(latest)} alt="Poster della diretta" />
-            {!latest.posterUrl && <p className="muted small">Template automatico: carica un'immagine per sostituirlo.</p>}
+            {!latest.posterUrl && (
+              <>
+                <p className="muted small" style={{ margin: 0 }}>
+                  Template automatico con il titolo dell'evento. Scegli la palette:
+                </p>
+                <div className="row wrap">
+                  {PALETTES.map((palette) => (
+                    <button
+                      key={palette.value}
+                      type="button"
+                      title={palette.label}
+                      aria-label={palette.label}
+                      disabled={busy}
+                      onClick={() => onPalette(palette.value)}
+                      className={`swatch${latest.posterPalette === palette.value ? " active" : ""}`}
+                      style={{ background: palette.css }}
+                    />
+                  ))}
+                  <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => onPalette(null)}>
+                    Automatico
+                  </button>
+                </div>
+                {latest.posterPalette === null && (
+                  <p className="muted small" style={{ margin: 0 }}>
+                    “Automatico”: la palette viene scelta dal link della diretta.
+                  </p>
+                )}
+              </>
+            )}
             <div className="row wrap">
               <input
                 ref={posterRef}

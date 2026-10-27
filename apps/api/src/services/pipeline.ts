@@ -42,6 +42,8 @@ export interface PipelineArgsOptions {
   inputUrl: string;
   outDir: string;
   kind: StreamKind;
+  /** Whether the source carries audio; WebRTC publishers may be video-only. */
+  hasAudio?: boolean;
   segmentSeconds: number;
   listSize: number;
   recordFile: string | null;
@@ -115,6 +117,7 @@ export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
   if (opts.kind === "audio") return buildFfmpegAudioArgs(opts);
 
   const ladder = opts.ladder ?? DEFAULT_LADDER;
+  const hasAudio = opts.hasAudio !== false;
   const record = Boolean(opts.recordFile);
   // One extra branch of the split when recording: FFmpeg refuses to reuse a
   // filter output in an second output file, so the recording needs its own label.
@@ -140,7 +143,7 @@ export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
 
   for (let i = 0; i < ladder.length; i++) {
     args.push("-map", `[vout${i}]`);
-    args.push("-map", "0:a:0");
+    if (hasAudio) args.push("-map", "0:a:0");
   }
 
   for (let i = 0; i < ladder.length; i++) {
@@ -152,11 +155,15 @@ export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
       `-b:v:${i}`, `${r.videoBitrateKbps}k`,
       `-maxrate:v:${i}`, `${r.maxrateKbps}k`,
       `-bufsize:v:${i}`, `${r.bufsizeKbps}k`,
-      `-c:a:${i}`, "aac",
-      `-b:a:${i}`, `${r.audioBitrateKbps}k`,
-      `-ac:a:${i}`, "2",
-      `-ar:a:${i}`, "48000",
     );
+    if (hasAudio) {
+      args.push(
+        `-c:a:${i}`, "aac",
+        `-b:a:${i}`, `${r.audioBitrateKbps}k`,
+        `-ac:a:${i}`, "2",
+        `-ar:a:${i}`, "48000",
+      );
+    }
   }
 
   args.push(
@@ -173,7 +180,8 @@ export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
     "-hls_flags", "delete_segments+independent_segments+program_date_time",
     "-hls_segment_filename", path.join(opts.outDir, "%v", "seg_%06d.ts"),
     "-master_pl_name", "master.m3u8",
-    "-var_stream_map", ladder.map((r, i) => `v:${i},a:${i},name:${r.name}`).join(" "),
+    "-var_stream_map",
+    ladder.map((r, i) => (hasAudio ? `v:${i},a:${i},name:${r.name}` : `v:${i},name:${r.name}`)).join(" "),
   );
 
   // The HLS output must be the first output file, and everything from `-f hls`
@@ -183,16 +191,19 @@ export function buildFfmpegArgs(opts: PipelineArgsOptions): string[] {
   args.push(path.join(opts.outDir, "%v", "index.m3u8"));
 
   if (opts.recordFile) {
+    args.push("-map", "[vrec]");
+    if (hasAudio) args.push("-map", "0:a:0");
     args.push(
-      "-map", "[vrec]",
-      "-map", "0:a:0",
-      "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-b:v", "2000k",
-      "-c:a", "aac",
-      "-b:a", "128k",
-      "-f", "mp4",
-      "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-b:v",
+      "2000k",
+      "-f",
+      "mp4",
+      "-movflags",
+      "+frag_keyframe+empty_moov+default_base_moof",
       opts.recordFile,
     );
   }
@@ -230,6 +241,11 @@ export interface PipelineStartOptions extends Omit<PipelineArgsOptions, "inputUr
   inputUrls: { primary: string; backup: string | null };
   /** Asked before every launch; the first path that answers true is used. */
   probeReady?: (which: "primary" | "backup") => Promise<boolean>;
+  /** Inspects the source once; WebRTC publishers can be video-only (Opus audio
+   *  does not survive the RTMP hop), so the encoder must not demand audio. */
+  probeInput?: (
+    url: string,
+  ) => Promise<{ video: boolean; audio: boolean } | null> | { video: boolean; audio: boolean } | null;
   /** Give up (and end the stream) if nothing is published within this window. */
   ingestWaitSeconds: number;
   recordFile: string | null;
@@ -245,6 +261,7 @@ interface PipelineMeta {
   retryTimer: NodeJS.Timeout | null;
   ingestTimer: NodeJS.Timeout | null;
   lastSegments: Set<string>;
+  caps: { video: boolean; audio: boolean } | null;
   stallTicks: number;
   callbacks: PipelineCallbacks;
   opts: PipelineStartOptions;
@@ -257,6 +274,41 @@ const MONITOR_INTERVAL_MS = 2000;
 // left the RTMP socket open. Ten minutes would be too late for an event.
 const STALL_TICKS = 60;
 const MAX_RETRY_ATTEMPTS = 200; // generous: a 10-minute ingest window may take many 2.5 s retries
+
+/** Asks ffprobe which elementary streams exist. Null when it cannot tell. */
+export function probeMedia(ffmpegBin: string, url: string, timeoutMs = 8000): Promise<{ video: boolean; audio: boolean } | null> {
+  const ffprobe = ffmpegBin.replace(/ffmpeg([^/\\]*)$/, "ffprobe$1");
+  return new Promise((resolve) => {
+    let settled = false;
+    const child = spawn(ffprobe, ["-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", url], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let out = "";
+    const finish = (value: { video: boolean; audio: boolean } | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    child.stdout?.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+    });
+    child.on("error", () => {
+      clearTimeout(timer);
+      finish(null);
+    });
+    child.on("exit", () => {
+      clearTimeout(timer);
+      const types = out.split(/\r?\n/).map((line) => line.trim().toLowerCase());
+      finish({ video: types.includes("video"), audio: types.includes("audio") });
+    });
+  });
+}
 
 export class HlsPipeline implements PipelineApi {
   private state: PipelineState = "idle";
@@ -306,6 +358,7 @@ export class HlsPipeline implements PipelineApi {
       retryTimer: null,
       ingestTimer: null,
       lastSegments: new Set(),
+      caps: null,
       stallTicks: 0,
       callbacks,
       opts,
@@ -343,17 +396,49 @@ export class HlsPipeline implements PipelineApi {
     }
     meta.currentInput = which;
     const inputUrl = which === "backup" && meta.opts.inputUrls.backup ? meta.opts.inputUrls.backup : meta.opts.inputUrls.primary;
+
+    if (!meta.caps) {
+      const probe = meta.opts.probeInput ?? ((url: string) => probeMedia(meta.opts.ffmpegBin, url));
+      try {
+        const result = probe(inputUrl);
+        // A synchronous probe (tests, stubs) keeps launch synchronous; a real
+        // ffprobe returns a promise and is awaited before the encoder spawns.
+        meta.caps = result instanceof Promise ? await result : result;
+      } catch {
+        meta.caps = null;
+      }
+      if (meta.caps) {
+        meta.callbacks.onLog?.(`source streams: video=${meta.caps.video} audio=${meta.caps.audio}`);
+      }
+    }
+
+    // An audio-only source (or a WebRTC publisher whose audio cannot cross the
+    // RTMP hop) must not be fed to the video ladder: it would fail on 0:a:0 and
+    // the broadcast would sit on "Preparazione…" forever.
+    const sourceAudioOnly = meta.caps !== null && !meta.caps.video && meta.caps.audio;
+
     meta.attempts += 1;
-    const args = buildFfmpegArgs({
-      ffmpegBin: meta.opts.ffmpegBin,
-      inputUrl,
-      outDir: meta.opts.outDir,
-      kind: meta.opts.kind,
-      segmentSeconds: meta.opts.segmentSeconds,
-      listSize: meta.opts.listSize,
-      recordFile: meta.opts.recordFile,
-      ladder: meta.opts.ladder,
-    });
+    const args = sourceAudioOnly
+      ? buildFfmpegAudioArgs({
+          ffmpegBin: meta.opts.ffmpegBin,
+          inputUrl,
+          outDir: meta.opts.outDir,
+          kind: "audio",
+          segmentSeconds: meta.opts.segmentSeconds,
+          listSize: meta.opts.listSize,
+          recordFile: meta.opts.recordFile,
+        })
+      : buildFfmpegArgs({
+          ffmpegBin: meta.opts.ffmpegBin,
+          inputUrl,
+          outDir: meta.opts.outDir,
+          kind: meta.opts.kind,
+          hasAudio: meta.caps ? meta.caps.audio : true,
+          segmentSeconds: meta.opts.segmentSeconds,
+          listSize: meta.opts.listSize,
+          recordFile: meta.opts.recordFile,
+          ladder: meta.opts.ladder,
+        });
 
     const child = this.spawnFn(meta.opts.ffmpegBin, args, {
       stdio: ["ignore", "ignore", "pipe"],

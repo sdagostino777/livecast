@@ -8,6 +8,9 @@
  * the API and cached briefly, because the title can be edited.
  */
 
+export const PALETTE_NAMES = ["blue", "teal", "indigo", "slate", "plum"] as const;
+export type PaletteName = (typeof PALETTE_NAMES)[number];
+
 const PALETTES = [
   { from: "#0f3559", to: "#2a6cb6", accent: "#7fb2e5" }, // deep navy → bright blue
   { from: "#0b3b4a", to: "#1d7a8c", accent: "#79d0dc" }, // petrol → teal
@@ -54,8 +57,8 @@ function wrapTitle(title: string, maxChars = 22): string[] {
   return lines.slice(0, 2);
 }
 
-export function posterSvg(opts: { title: string; brand: string; seed: string }): string {
-  const palette = paletteFor(opts.seed);
+export function posterSvg(opts: { title: string; brand: string; seed: string; palette?: string | null }): string {
+  const palette = paletteByName(opts.palette) ?? paletteFor(opts.seed);
   const lines = wrapTitle(opts.title);
   const fontSize = lines.some((line) => line.length > 16) ? 62 : 76;
   const lineHeight = fontSize * 1.18;
@@ -88,8 +91,15 @@ export function posterSvg(opts: { title: string; brand: string; seed: string }):
 }
 
 /** Square variant for lists: initials over the same gradient. */
-export function iconSvg(opts: { title: string; seed: string }): string {
-  const palette = paletteFor(opts.seed);
+/** The explicit choice wins; the slug-derived palette is the fallback. */
+export function paletteByName(name?: string | null): (typeof PALETTES)[number] | null {
+  if (!name) return null;
+  const index = (PALETTE_NAMES as readonly string[]).indexOf(name);
+  return index === -1 ? null : (PALETTES[index] ?? null);
+}
+
+export function iconSvg(opts: { title: string; seed: string; palette?: string | null }): string {
+  const palette = paletteByName(opts.palette) ?? paletteFor(opts.seed);
   const initials = opts.title
     .split(/\s+/)
     .filter(Boolean)

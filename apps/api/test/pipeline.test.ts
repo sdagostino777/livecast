@@ -48,6 +48,14 @@ describe("buildFfmpegArgs", () => {
     expect(rec.join(" ")).toContain("/srv/recordings/x.frag.mp4");
   });
 
+  it("builds a video-only ladder when the source has no audio", () => {
+    const args = buildFfmpegArgs({ ...base, kind: "video", hasAudio: false });
+    const joined = args.join(" ");
+    expect(args[args.indexOf("-var_stream_map") + 1]).toBe("v:0,name:720 v:1,name:480 v:2,name:360");
+    expect(joined).not.toContain("-c:a:0");
+    expect(joined).not.toContain("0:a:0");
+  });
+
   it("builds audio-only arguments without any video chain", () => {
     const args = buildFfmpegAudioArgs({ ...base, kind: "audio" });
     const joined = args.join(" ");
@@ -99,6 +107,9 @@ function makePipeline(outDir: string) {
     listSize: 6,
     recordFile: null as string | null,
     ingestWaitSeconds: 600,
+    // Tests must not wait for a real ffprobe on an RTMP URL (and a synchronous
+    // probe keeps launch() synchronous for the assertions below).
+    probeInput: () => ({ video: true, audio: true }),
   };
   const callbacks = {
     onLive: () => events.push("live"),

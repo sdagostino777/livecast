@@ -66,6 +66,7 @@ const PatchStreamBody = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   kind: z.enum(["video", "audio"]).optional(),
   record: z.boolean().optional(),
+  posterPalette: z.enum(["blue", "teal", "indigo", "slate", "plum"]).nullable().optional(),
 });
 
 const PasswordBody = z.object({
@@ -363,6 +364,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (body.data.record !== undefined) {
       app.db.prepare("UPDATE streams SET record = ? WHERE id = ?").run(body.data.record ? 1 : 0, stream.id);
     }
+    if (body.data.posterPalette !== undefined) {
+      app.db.prepare("UPDATE streams SET poster_palette = ? WHERE id = ?").run(body.data.posterPalette, stream.id);
+    }
     return { stream: toView(getStreamById(app.db, stream.id)!, app.settings.get().publicBaseUrl) };
   });
 
@@ -528,7 +532,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
     reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "private, max-age=60");
-    return posterSvg({ title: stream.title, brand: app.settings.get().brandName, seed: stream.slug });
+    return posterSvg({ title: stream.title, brand: app.settings.get().brandName, seed: stream.slug, palette: stream.poster_palette });
   });
 
   app.get("/api/admin/icon/:id", async (req, reply) => {
@@ -539,7 +543,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
     reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "private, max-age=60");
-    return iconSvg({ title: stream.title, seed: stream.slug });
+    return iconSvg({ title: stream.title, seed: stream.slug, palette: stream.poster_palette });
   });
 
   // --- event images (poster before playback, square icon in lists) ----------

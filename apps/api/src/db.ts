@@ -52,6 +52,7 @@ export function openDb(file: string): Db {
       status     TEXT NOT NULL DEFAULT 'draft',    -- draft | starting | live | ended
       kind       TEXT NOT NULL DEFAULT 'video',    -- video | audio
       poster_ext TEXT,                             -- jpg | png | webp (file in DATA_DIR/uploads)
+      poster_palette TEXT,                         -- blue | teal | indigo | slate | plum
       icon_ext   TEXT,
       record     INTEGER NOT NULL DEFAULT 0,
       created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -100,6 +101,9 @@ export function openDb(file: string): Db {
   }
   if (!streamCols.some((c) => c.name === "icon_ext")) {
     db.exec("ALTER TABLE streams ADD COLUMN icon_ext TEXT");
+  }
+  if (!streamCols.some((c) => c.name === "poster_palette")) {
+    db.exec("ALTER TABLE streams ADD COLUMN poster_palette TEXT");
   }
 
   return db;

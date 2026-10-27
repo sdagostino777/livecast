@@ -1113,6 +1113,20 @@ h2 {
   background: var(--surface-2);
 }
 
+.swatch {
+  width: 54px;
+  height: 34px;
+  border-radius: 9px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.swatch.active {
+  border-color: var(--brand);
+  outline: 2px solid rgba(29, 91, 165, 0.25);
+}
+
 .pub-preview {
   width: min(280px, 100%);
   border-radius: 10px;

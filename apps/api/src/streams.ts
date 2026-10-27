@@ -19,6 +19,7 @@ export interface StreamRow {
   kind: "video" | "audio";
   poster_ext: string | null;
   icon_ext: string | null;
+  poster_palette: string | null;
   record: number;
   created_by: string | null;
   started_at: string | null;
@@ -38,6 +39,7 @@ export interface StreamView {
   fallbackPosterUrl: string;
   adminPosterUrl: string;
   adminIconUrl: string;
+  posterPalette: string | null;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
@@ -57,6 +59,7 @@ export function toView(row: StreamRow, publicBaseUrl: string = process.env.PUBLI
     fallbackPosterUrl: `/api/poster/${row.slug}`,
     adminPosterUrl: `/api/admin/poster/${row.id}`,
     adminIconUrl: `/api/admin/icon/${row.id}`,
+    posterPalette: row.poster_palette,
     record: row.record === 1,
     startedAt: row.started_at,
     endedAt: row.ended_at,

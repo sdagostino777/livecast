@@ -64,6 +64,7 @@ export interface StreamView {
   fallbackPosterUrl: string;
   adminPosterUrl: string;
   adminIconUrl: string;
+  posterPalette: string | null;
   record: boolean;
   startedAt: string | null;
   endedAt: string | null;
