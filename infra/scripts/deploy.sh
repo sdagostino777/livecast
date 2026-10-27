@@ -54,13 +54,26 @@ fi
 
 PROVISION=0
 ALLOW_DIRTY=0
+# --local: run everything on this machine, for the beginner path where the
+# operator works directly in the VPS's browser terminal and has no laptop
+# SSH setup. It needs the repo checked out on the server and root access.
+LOCAL=0
 for arg in "$@"; do
   case "$arg" in
     --provision) PROVISION=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --local) LOCAL=1 ;;
     *) fail "unknown option: $arg" ;;
   esac
 done
+if [ "${LOCAL}" -eq 1 ]; then
+  SSH_HOST="local"
+  run() { bash -c "$1"; }
+  [ "$(id -u)" -eq 0 ] || fail "--local must run as root on the server"
+else
+  [ -n "${SSH_HOST:-}" ] || fail "set SSH_HOST in .deploy.env (or pass --local to run on this machine)"
+  run() { ssh -i "${SSH_KEY}" -o BatchMode=yes -o ServerAliveInterval=30 -o ConnectTimeout=15 "${SSH_HOST}" "$1"; }
+fi
 
 # --- 1. Safety checks -------------------------------------------------------
 
@@ -72,11 +85,11 @@ fi
 
 # --- 2. Transfer source -----------------------------------------------------
 
-log "Syncing source to ${SSH_HOST}:${APP_DIR}"
+log "Syncing source to ${APP_DIR}"
 # provision.sh owns the directory tree, but a first deploy with no
 # --provision (or a VPS where the app dir was removed) still has to land
 # somewhere: create it root-owned, provision re-owns it afterwards.
-${SSH} "mkdir -p ${APP_DIR}"
+run "mkdir -p ${APP_DIR}"
 # .env, data and node_modules are server state, never local state:
 # `--delete` would otherwise wipe the production credentials and the database.
 EXCLUDES=(--exclude node_modules --exclude dist --exclude .git --exclude .env
@@ -84,15 +97,15 @@ EXCLUDES=(--exclude node_modules --exclude dist --exclude .git --exclude .env
 if [ "${SYNC_MODE}" = "rsync" ]; then
   "${RSYNC_BIN}" -az --delete "${EXCLUDES[@]}" \
     -e "ssh -i ${SSH_KEY} -o BatchMode=yes" \
-    ./ "${SSH_HOST}:${APP_DIR}/"
+    ./ "${APP_DIR}/"
 else
   log "GNU rsync not found — syncing with tar (removed files are not deleted remotely)"
   COPYFILE_DISABLE=1 tar -czf - --no-xattrs --exclude "._*" "${EXCLUDES[@]}" . \
-    | ${SSH} "mkdir -p ${APP_DIR} && tar -xzf - -C ${APP_DIR}"
+    | run "mkdir -p ${APP_DIR} && tar -xzf - -C ${APP_DIR}"
 fi
 # Before the first provision the service user does not exist yet; after it,
 # this is what keeps the tree owned by the user systemd runs as.
-${SSH} "if id ${APP_USER} >/dev/null 2>&1; then chown -R ${APP_USER}:${APP_USER} ${APP_DIR}; fi; chmod -R g+w ${APP_DIR}"
+run "if id ${APP_USER} >/dev/null 2>&1; then chown -R ${APP_USER}:${APP_USER} ${APP_DIR}; fi; chmod -R g+w ${APP_DIR}"
 log "source synced (${SYNC_MODE})"
 
 # --- 3. First-install provisioning (optional) -------------------------------
@@ -105,13 +118,13 @@ if [ "${PROVISION}" -eq 1 ]; then
   PROVISION_ENV="APP_NAME=${APP_NAME}"
   [ -n "${APP_DOMAIN:-}" ] && PROVISION_ENV="${PROVISION_ENV} APP_DOMAIN=${APP_DOMAIN}"
   [ -n "${LETSENCRYPT_EMAIL:-}" ] && PROVISION_ENV="${PROVISION_ENV} LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
-  ${SSH} "${PROVISION_ENV} bash ${APP_DIR}/infra/scripts/provision.sh"
+  run "${PROVISION_ENV} bash ${APP_DIR}/infra/scripts/provision.sh"
 fi
 
 # --- 4. Build on the server -------------------------------------------------
 
 log "Installing dependencies and building"
-${SSH} "set -euo pipefail
+run "set -euo pipefail
   cd ${APP_DIR}
   # corepack's shim can be present yet fail to resolve its cached pnpm
   # (MODULE_NOT_FOUND under ~/.cache/node/corepack). A real pnpm@12 install is
@@ -129,27 +142,27 @@ log "build ok"
 # --- 5. Restart and verify ---------------------------------------------------
 
 log "Restarting livecast"
-${SSH} "systemctl restart ${UNIT} && sleep 1 && systemctl is-active --quiet ${UNIT}" \
-  || { ${SSH} "journalctl -u ${UNIT} -n 40 --no-pager" || true; fail "service did not start"; }
+run "systemctl restart ${UNIT} && sleep 1 && systemctl is-active --quiet ${UNIT}" \
+  || { run "journalctl -u ${UNIT} -n 40 --no-pager" || true; fail "service did not start"; }
 
-if ${SSH} "curl -fsS ${HEALTH_URL}" >/dev/null; then
+if run "curl -fsS ${HEALTH_URL}" >/dev/null; then
   log "health check passed (${HEALTH_URL})"
 else
-  ${SSH} "journalctl -u ${UNIT} -n 40 --no-pager" || true
+  run "journalctl -u ${UNIT} -n 40 --no-pager" || true
   fail "health check failed"
 fi
 
 # --- 6. First admin user ----------------------------------------------------
 
 log "Admin user"
-CREATE_OUT="$(${SSH} "cd ${APP_DIR} && node --env-file=.env apps/api/dist/cli.js create-admin --username admin" 2>&1)" || RC=$?
+CREATE_OUT="$(run "cd ${APP_DIR} && node --env-file=.env apps/api/dist/cli.js create-admin --username admin" 2>&1)" || RC=$?
 RC="${RC:-0}"
 if [ "${RC}" -eq 2 ]; then
   log "admin user already exists — password unchanged"
 elif [ "${RC}" -eq 0 ]; then
   PW="$(printf '%s\n' "${CREATE_OUT}" | sed -n 's/^ADMIN_PASSWORD=//p')"
   [ -n "${PW}" ] || fail "create-admin printed no password: ${CREATE_OUT}"
-  ${SSH} "printf 'ADMIN_PASSWORD=%s\n' '${PW}' >> /root/.livecast-credentials && chmod 600 /root/.livecast-credentials"
+  run "printf 'ADMIN_PASSWORD=%s\n' '${PW}' >> /root/.livecast-credentials && chmod 600 /root/.livecast-credentials"
   printf '\n\033[1;32mAdmin creato.\033[0m  utente: admin\n'
   printf '  password: \033[1;33m%s\033[0m\n' "${PW}"
   printf '  (salvata anche in /root/.livecast-credentials sul VPS)\n'

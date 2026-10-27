@@ -43,7 +43,7 @@ export const api = {
 export type Role = "admin" | "operator";
 
 export interface Me {
-  user: { username: string; role: Role };
+  user: { username: string; role: Role; mustChangePassword?: boolean };
 }
 
 export interface PublicUser {

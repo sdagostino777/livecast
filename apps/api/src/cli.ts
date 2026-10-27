@@ -10,7 +10,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { dbFile } from "./config.js";
-import { destroyAllSessions, createUser, getUserByUsername, hashPassword, setPassword } from "./auth.js";
+import { destroyAllSessions, createUser, getUserByUsername, hashPassword, setPassword, setMustChangePassword } from "./auth.js";
 import { openDb } from "./db.js";
 import { MIN_PASSWORD_LENGTH } from "./auth.js";
 
@@ -66,22 +66,34 @@ switch (command) {
       console.error(`user "${username}" already exists`);
       process.exit(2);
     }
-    const pw = password ?? generatedPassword();
-    if (pw.length < MIN_PASSWORD_LENGTH) fail(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
-    const user = createUser(db, username, await hashPassword(pw));
+    // The documented first-run credentials are admin / Admin, and the panel
+    // forces a change before any other operation. --password overrides them for
+    // automated installs that already keep a secret.
+    const pw = password ?? "Admin";
+    if (pw.length > 0 && pw !== "Admin" && pw.length < MIN_PASSWORD_LENGTH) {
+      fail(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    }
+    const user = createUser(db, username, await hashPassword(pw), "admin", pw === "Admin");
     console.log(`ADMIN_PASSWORD=${pw}`);
     console.log(`created admin user "${user.username}" (id ${user.id})`);
+    if (pw === "Admin") console.log("default password in use — the panel will force a change at first login");
     break;
   }
   case "reset-password": {
     const user = getUserByUsername(db, username);
     if (!user) fail(`no such user: ${username}`);
     const pw = password ?? generatedPassword();
-    if (pw.length < MIN_PASSWORD_LENGTH) fail(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    const forced = pw !== "Admin";
+    if (forced && pw.length < MIN_PASSWORD_LENGTH) fail(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
     setPassword(db, user.id, await hashPassword(pw));
+    setMustChangePassword(db, user.id, pw === "Admin");
     destroyAllSessions(db, user.id);
     console.log(`ADMIN_PASSWORD=${pw}`);
-    console.log(`password reset for "${user.username}" — all sessions invalidated`);
+    console.log(
+      pw === "Admin"
+        ? `password reset to the default for "${user.username}" — the panel will force a change at next login`
+        : `password reset for "${user.username}" — all sessions invalidated`,
+    );
     break;
   }
   default:

@@ -30,6 +30,7 @@ export function openDb(file: string): Db {
       username_key  TEXT NOT NULL UNIQUE,          -- lowercase, used for lookups
       password_hash TEXT NOT NULL,
       role          TEXT NOT NULL DEFAULT 'admin',
+      must_change_password INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL
     );
 
@@ -89,6 +90,11 @@ export function openDb(file: string): Db {
   if (!streamCols.some((c) => c.name === "kind")) {
     db.exec("ALTER TABLE streams ADD COLUMN kind TEXT NOT NULL DEFAULT 'video'");
   }
+  const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === "must_change_password")) {
+    db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
+  }
+
   if (!streamCols.some((c) => c.name === "poster_ext")) {
     db.exec("ALTER TABLE streams ADD COLUMN poster_ext TEXT");
   }

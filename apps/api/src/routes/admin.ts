@@ -24,6 +24,7 @@ import { audit } from "../db.js";
 import {
   MIN_PASSWORD_LENGTH,
   createUser,
+  setMustChangePassword,
   deleteUser,
   destroyAllSessions,
   destroyOtherSessions,
@@ -135,6 +136,18 @@ function probeTcp(host: string, port: number): Promise<{ ok: boolean; ms: number
 }
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
+  // A default password ("Admin") must be changed before anything else in the
+  // panel works: the account that can push video to the public stream is not
+  // allowed to keep a password that is printed in the docs.
+  app.addHook("preHandler", async (req, reply) => {
+    if (!req.url.startsWith("/api/admin/")) return;
+    if (req.url.startsWith("/api/admin/password")) return;
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    if (session.user.mustChangePassword) {
+      return reply.code(403).send({ error: "password_change_required" });
+    }
+  });
   app.get("/api/admin/overview", async (req, reply) => {
     const session = requireSession(app.db, req, reply);
     if (!session) return reply;
@@ -498,6 +511,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: "invalid_credentials" });
     }
     setPassword(app.db, user.id, await hashPassword(parsed.data.newPassword));
+    setMustChangePassword(app.db, user.id, false);
     destroyOtherSessions(app.db, user.id, session.sessionId);
     audit(app.db, { userId: user.id, username: user.username, action: "password_changed", ip: req.ip });
     return { ok: true };

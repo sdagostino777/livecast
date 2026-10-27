@@ -1113,6 +1113,13 @@ h2 {
   background: var(--surface-2);
 }
 
+.pub-preview {
+  width: min(280px, 100%);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #04101d;
+}
+
 .player-poster {
   position: absolute;
   inset: 0;

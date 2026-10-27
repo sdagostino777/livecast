@@ -38,6 +38,7 @@ export interface User {
   id: string;
   username: string;
   role: string;
+  mustChangePassword: boolean;
 }
 
 export interface Session {
@@ -60,24 +61,31 @@ export async function verifyPassword(passwordHash: string, password: string): Pr
 
 export function getUserByUsername(db: Db, username: string): (User & { passwordHash: string }) | null {
   const row = db
-    .prepare(`SELECT id, username, role, password_hash FROM users WHERE username_key = ?`)
+    .prepare(`SELECT id, username, role, password_hash, must_change_password FROM users WHERE username_key = ?`)
     .get(username.trim().toLowerCase()) as
-    | { id: string; username: string; role: string; password_hash: string }
+    | { id: string; username: string; role: string; password_hash: string; must_change_password: number }
     | undefined;
   if (!row) return null;
   return {
     id: row.id,
     username: row.username,
     role: row.role,
+    mustChangePassword: row.must_change_password === 1,
     passwordHash: row.password_hash,
   };
 }
 
 export function listUsers(db: Db): Array<User & { createdAt: string }> {
   const rows = db
-    .prepare(`SELECT id, username, role, created_at FROM users ORDER BY created_at ASC`)
-    .all() as Array<{ id: string; username: string; role: string; created_at: string }>;
-  return rows.map((r) => ({ id: r.id, username: r.username, role: r.role, createdAt: r.created_at }));
+    .prepare(`SELECT id, username, role, must_change_password, created_at FROM users ORDER BY created_at ASC`)
+    .all() as Array<{ id: string; username: string; role: string; must_change_password: number; created_at: string }>;
+  return rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    role: r.role,
+    mustChangePassword: r.must_change_password === 1,
+    createdAt: r.created_at,
+  }));
 }
 
 export function deleteUser(db: Db, id: string): void {
@@ -85,13 +93,23 @@ export function deleteUser(db: Db, id: string): void {
   db.prepare("DELETE FROM users WHERE id = ?").run(id);
 }
 
-export function createUser(db: Db, username: string, passwordHash: string, role = "admin"): User {
+export function createUser(
+  db: Db,
+  username: string,
+  passwordHash: string,
+  role = "admin",
+  mustChangePassword = false,
+): User {
   const id = newId("usr");
   db.prepare(
-    `INSERT INTO users (id, username, username_key, password_hash, role, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, username.trim(), username.trim().toLowerCase(), passwordHash, role, nowIso());
-  return { id, username: username.trim(), role };
+    `INSERT INTO users (id, username, username_key, password_hash, role, must_change_password, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, username.trim(), username.trim().toLowerCase(), passwordHash, role, mustChangePassword ? 1 : 0, nowIso());
+  return { id, username: username.trim(), role, mustChangePassword };
+}
+
+export function setMustChangePassword(db: Db, userId: string, mustChange: boolean): void {
+  db.prepare("UPDATE users SET must_change_password = ? WHERE id = ?").run(mustChange ? 1 : 0, userId);
 }
 
 function sha256(value: string): string {
@@ -122,12 +140,12 @@ export function lookupSession(db: Db, token: string): Session | null {
   if (!token || token.length < 20) return null;
   const row = db
     .prepare(
-      `SELECT s.id, s.expires_at, u.id AS uid, u.username, u.role
+      `SELECT s.id, s.expires_at, u.id AS uid, u.username, u.role, u.must_change_password
          FROM sessions s JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = ?`,
     )
     .get(sha256(token)) as
-    | { id: string; expires_at: string; uid: string; username: string; role: string }
+    | { id: string; expires_at: string; uid: string; username: string; role: string; must_change_password: number }
     | undefined;
   if (!row) return null;
   if (new Date(row.expires_at).getTime() <= Date.now()) {
@@ -136,7 +154,7 @@ export function lookupSession(db: Db, token: string): Session | null {
   }
   return {
     sessionId: row.id,
-    user: { id: row.uid, username: row.username, role: row.role },
+    user: { id: row.uid, username: row.username, role: row.role, mustChangePassword: row.must_change_password === 1 },
     expiresAt: row.expires_at,
   };
 }

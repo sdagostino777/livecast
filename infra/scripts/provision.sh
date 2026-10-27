@@ -193,7 +193,8 @@ fi
 log "Firewall"
 if command -v ufw >/dev/null; then
   ufw allow "${INGEST_PORT}/tcp" comment 'Livecast RTMP ingest' >/dev/null
-  ok "ufw allows ${INGEST_PORT}/tcp"
+  ufw allow 8189/udp comment 'Livecast WebRTC (browser publishing)' >/dev/null
+  ok "ufw allows ${INGEST_PORT}/tcp and 8189/udp"
 else
   warn "ufw not installed — make sure ${INGEST_PORT}/tcp is reachable"
 fi

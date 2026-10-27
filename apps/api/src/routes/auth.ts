@@ -51,7 +51,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       );
       reply.setCookie(SESSION_COOKIE, token, sessionCookieOptions());
       audit(app.db, { userId: user.id, username, action: "login_ok", ip: req.ip });
-      return { user: { username: user.username, role: user.role } };
+      return {
+        user: { username: user.username, role: user.role, mustChangePassword: user.mustChangePassword },
+      };
     },
   );
 
@@ -72,6 +74,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // session must stop working immediately, not at next cookie expiry.
     const session = lookupSession(app.db, token);
     if (!session) return reply.code(401).send({ error: "unauthorized" });
-    return { user: { username: session.user.username, role: session.user.role } };
+    return {
+      user: {
+        username: session.user.username,
+        role: session.user.role,
+        mustChangePassword: session.user.mustChangePassword,
+      },
+    };
   });
 }

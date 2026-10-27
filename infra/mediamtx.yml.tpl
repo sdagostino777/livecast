@@ -50,12 +50,17 @@ authInternalUsers:
 api: yes
 apiAddress: 127.0.0.1:9997
 
-# RTMP is the one protocol in use.
+# RTMP for OBS, WebRTC (WHIP) so the panel itself can publish from a camera or
+# a shared screen — no external software required.
 rtmp: yes
 rtmpAddress: :1935
 rtsp: no
 hls: no
-webrtc: no
+webrtc: yes
+webrtcAddress: 127.0.0.1:8889
+webrtcAllowOrigin: ["*"]
+webrtcAdditionalHosts: ["__DOMAIN__"]
+webrtcLocalUDPAddress: :8189
 srt: no
 moq: no
 

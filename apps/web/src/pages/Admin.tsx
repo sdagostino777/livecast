@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, Checks, Me, Overview, Settings, StreamView, uploadStreamImage } from "../api";
 import { useBrand } from "../brand";
+import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
 import { copyToClipboard, formatDate, formatTime, navigate } from "../router";
 
@@ -61,6 +62,11 @@ export function Admin() {
   const [posterTarget, setPosterTarget] = useState<string | null>(null);
   const posterInput = useRef<HTMLInputElement | null>(null);
   const toastTimer = useRef<number | null>(null);
+  const [pubKind, setPubKind] = useState<null | "camera" | "screen">(null);
+  const [pubError, setPubError] = useState<string | null>(null);
+  const pubPc = useRef<RTCPeerConnection | null>(null);
+  const pubMedia = useRef<MediaStream | null>(null);
+  const pubVideo = useRef<HTMLVideoElement | null>(null);
 
   const notify = useCallback((message: string) => {
     setToast(message);
@@ -115,6 +121,22 @@ export function Admin() {
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, [menuOpen]);
+
+  // Publishing from the browser lives in this page: a reload ends the stream.
+  // The browser is asked to confirm, and the UI says so in plain words.
+  useEffect(() => {
+    if (!pubKind) return;
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, [pubKind]);
+
+  useEffect(() => {
+    if (pubVideo.current && pubMedia.current) pubVideo.current.srcObject = pubMedia.current;
+  }, [pubKind]);
 
   async function act(fn: () => Promise<void>) {
     setBusy(true);
@@ -178,6 +200,70 @@ export function Admin() {
     });
   }
 
+  async function publishFromBrowser(kind: "camera" | "screen", streamId: string, startFirst: boolean) {
+    setPubError(null);
+    setBusy(true);
+    try {
+      if (startFirst) await api.post(`/api/admin/streams/${streamId}/start`);
+      const ingest = await api.get<{ server: string }>("/api/admin/ingest");
+      const parsed = new URL(ingest.server);
+      const user = parsed.searchParams.get("user") ?? "";
+      const pass = parsed.searchParams.get("pass") ?? "";
+
+      const media =
+        kind === "screen"
+          ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+          : await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
+      pubMedia.current = media;
+      if (pubVideo.current) pubVideo.current.srcObject = media;
+
+      const pc = new RTCPeerConnection();
+      pubPc.current = pc;
+      media.getTracks().forEach((track) => pc.addTrack(track, media));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const res = await fetch(`/live/whip?user=${encodeURIComponent(user)}&pass=${encodeURIComponent(pass)}`, {
+        method: "POST",
+        headers: { "content-type": "application/sdp" },
+        body: offer.sdp,
+      });
+      if (!res.ok) throw new Error(`WHIP ${res.status}`);
+      await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+      await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("timeout")), 10000);
+        pc.addEventListener("connectionstatechange", () => {
+          if (pc.connectionState === "connected") {
+            window.clearTimeout(timer);
+            resolve();
+          } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+            window.clearTimeout(timer);
+            reject(new Error(pc.connectionState));
+          }
+        });
+      });
+      setPubKind(kind);
+      notify("Pubblicazione dal browser avviata.");
+      await refresh();
+    } catch (err) {
+      stopPublishing();
+      setPubError(
+        err instanceof Error && err.message === "timeout"
+          ? "Connessione WebRTC non riuscita (controlla la porta UDP 8189 sul server)."
+          : "Impossibile avviare la pubblicazione dal browser.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function stopPublishing() {
+    pubPc.current?.close();
+    pubPc.current = null;
+    pubMedia.current?.getTracks().forEach((track) => track.stop());
+    pubMedia.current = null;
+    setPubKind(null);
+  }
+
   async function uploadPoster(streamId: string, file: File) {
     await act(async () => {
       await uploadStreamImage(streamId, "poster", file);
@@ -204,6 +290,10 @@ export function Admin() {
         <span className="spinner" aria-label="Caricamento" />
       </div>
     );
+  }
+
+  if (me.mustChangePassword) {
+    return <ForcePasswordChange username={me.username} isAdmin={me.role === "admin"} />;
   }
 
   const active = ov?.stream ?? null;
@@ -344,6 +434,46 @@ export function Admin() {
                   </button>
                 )}
               </div>
+            </div>
+
+            <div className="obs">
+              <p className="small" style={{ margin: 0 }}>
+                <b>Pubblica dal browser</b> (senza OBS): camera o schermo direttamente da qui. La pagina deve restare
+                aperta durante la trasmissione — se la ricarichi o la chiudi, la diretta si interrompe. Per eventi
+                lunghi conviene OBS, che riconnette da solo.
+              </p>
+              {pubKind === null ? (
+                <div className="row wrap">
+                  <button
+                    className="btn btn-primary btn-small"
+                    disabled={busy}
+                    onClick={() => void publishFromBrowser("camera", current.id, !active)}
+                  >
+                    Pubblica da camera
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-small"
+                    disabled={busy}
+                    onClick={() => void publishFromBrowser("screen", current.id, !active)}
+                  >
+                    Condividi schermo
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <video ref={pubVideo} autoPlay muted playsInline className="pub-preview" />
+                  <p className="small" style={{ margin: 0 }}>
+                    In pubblicazione dal browser ({pubKind === "camera" ? "camera" : "schermo"}).{" "}
+                    <b>Non ricaricare la pagina.</b>
+                  </p>
+                  <div>
+                    <button className="btn btn-danger btn-small" disabled={busy} onClick={stopPublishing}>
+                      Interrompi pubblicazione
+                    </button>
+                  </div>
+                </>
+              )}
+              {pubError && <p className="error-text small">{pubError}</p>}
             </div>
 
             {active && (
