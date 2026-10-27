@@ -1416,3 +1416,18 @@ h2 {
   padding: 6px 12px;
   border-radius: 999px;
 }
+
+.log-view {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  background: #0b1620;
+  color: #cfe0f2;
+  border: 1px solid #22303c;
+  border-radius: 10px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}

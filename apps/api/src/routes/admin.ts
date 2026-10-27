@@ -43,6 +43,7 @@ import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
 import { iconSvg, posterSvg } from "../poster.js";
+import { journalLines, recentInMemory, remember } from "../services/logs.js";
 import { ingestServer, ingestServerWithCreds, mediaInputUrl, mediaRtspInputUrl } from "../ingest.js";
 
 const CreateStreamBody = z.object({
@@ -504,7 +505,8 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
           },
           onLog: (line) => {
             // Encoder stderr is the only window into a stuck broadcast: errors
-            // must reach the journal, not disappear at debug level.
+            // must reach the journal and the panel, not disappear at debug level.
+            remember(`[${slug}] ${line}`);
             if (/error|failed|invalid|timed out|unable/i.test(line)) app.log.warn({ slug, line: line.slice(0, 300) });
             else app.log.debug({ slug, line });
           },
@@ -773,6 +775,68 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const codes = generateRecoveryCodes(app.db, user.id);
     audit(app.db, { userId: user.id, username: user.username, action: "recovery_codes_generated", ip: req.ip });
     return { recoveryCodes: codes };
+  });
+
+  // --- logs ---------------------------------------------------------------
+  app.get("/api/admin/logs", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const limit = Math.min(Math.max(Number((req.query as { lines?: string }).lines ?? 200) || 200, 20), 1000);
+    const unit = process.env.APP_UNIT || "livecast.service";
+    const fromJournal = await journalLines(unit, limit);
+    const memory = recentInMemory(limit);
+    return {
+      source: fromJournal ? `journalctl -u ${unit}` : "memoria del processo",
+      lines: fromJournal ?? memory,
+      memory,
+    };
+  });
+
+  // --- kill whatever is left hanging -------------------------------------
+  app.post("/api/admin/broadcast/reset", async (req, reply) => {
+    const session = requireSession(app.db, req, reply);
+    if (!session) return reply;
+    const cleaned: string[] = [];
+
+    const active = getActiveStream(app.db);
+    try {
+      app.pipeline.stop();
+    } catch {
+      /* nothing to stop */
+    }
+    if (active) {
+      setStreamStatus(app.db, active.id, "ended");
+      cleaned.push(`diretta "${active.slug}" chiusa`);
+    }
+
+    // Any stream left active in the database, and its segments, goes too.
+    const leftovers = app.db.prepare("SELECT id, slug FROM streams WHERE status IN ('starting','live')").all() as Array<{
+      id: string;
+      slug: string;
+    }>;
+    for (const row of leftovers) {
+      setStreamStatus(app.db, row.id, "ended");
+      cleaned.push(`stato di ${row.slug} corretto`);
+    }
+
+    const hlsRoot = path.join(config.dataDir, "hls");
+    try {
+      for (const entry of fs.readdirSync(hlsRoot)) {
+        fs.rmSync(path.join(hlsRoot, entry), { recursive: true, force: true });
+        cleaned.push(`segmenti di ${entry} rimossi`);
+      }
+    } catch {
+      /* nothing to clean */
+    }
+
+    audit(app.db, {
+      userId: session.user.id,
+      username: session.user.username,
+      action: "broadcast_reset",
+      detail: cleaned.join(" · ") || "niente da fare",
+      ip: req.ip,
+    });
+    return { cleaned };
   });
 
   app.get("/api/admin/audit", async (req, reply) => {

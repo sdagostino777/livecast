@@ -443,6 +443,7 @@ export function Admin() {
       </section>
 
       <SettingsPanel notify={notify} />
+      <MaintenancePanel notify={notify} />
 
       {leavePrompt && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
@@ -738,6 +739,72 @@ function ExternalEncoderPanel({ ov }: { ov: Overview | null }) {
         </button>
       )}
     </div>
+  );
+}
+
+function MaintenancePanel({ notify }: { notify: (m: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string[] | null>(null);
+  const [logs, setLogs] = useState<{ source: string; lines: string[] } | null>(null);
+  const [openLogs, setOpenLogs] = useState(false);
+
+  async function reset() {
+    if (!window.confirm("Chiudere le trasmissioni rimaste appese e rimuovere i segmenti?")) return;
+    setBusy(true);
+    try {
+      const res = await api.post<{ cleaned: string[] }>("/api/admin/broadcast/reset");
+      setResult(res.cleaned.length ? res.cleaned : ["niente da fare"]);
+      notify("Pulizia completata.");
+    } catch {
+      setResult(["operazione non riuscita"]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadLogs() {
+    setOpenLogs((open) => !open);
+    try {
+      const res = await api.get<{ source: string; lines: string[] }>("/api/admin/logs?lines=200");
+      setLogs({ source: res.source, lines: res.lines.slice(-200) });
+    } catch {
+      setLogs({ source: "errore", lines: ["impossibile leggere i log"] });
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Manutenzione</h2>
+        <button className="btn btn-ghost btn-small" onClick={() => void loadLogs()}>
+          {openLogs ? "Nascondi log" : "Mostra log"}
+        </button>
+      </div>
+
+      <div className="row wrap">
+        <button className="btn btn-danger" disabled={busy} onClick={() => void reset()}>
+          Termina trasmissioni appese
+        </button>
+        <span className="muted small">
+          Chiude la diretta in corso, riporta a «pronta» ogni stato rimasto appeso e cancella i segmenti.
+        </span>
+      </div>
+
+      {result && (
+        <div className="banner banner-ok" style={{ marginTop: 12 }}>
+          <span className="small">{result.join(" · ")}</span>
+        </div>
+      )}
+
+      {openLogs && (
+        <>
+          <p className="muted small" style={{ marginBottom: 6 }}>
+            Sorgente: {logs?.source ?? "…"}
+          </p>
+          <pre className="log-view">{(logs?.lines ?? []).join("\n") || "nessuna riga"}</pre>
+        </>
+      )}
+    </section>
   );
 }
 
