@@ -18,9 +18,34 @@
       h3 { font-size: 16px; margin: 14px 0 4px; }
       p { margin: 6px 0; }
       .small { font-size: 12.5px; color: #56647a; }
-      .cover { background: linear-gradient(160deg, #0f3559 0%, #1d5ba5 60%, #2a6cb6 100%); color: #fff; display: flex; flex-direction: column; justify-content: center; }
-      .cover h1 { color: #fff; font-size: 40px; }
-      .cover .tagline { font-size: 18px; opacity: 0.92; margin-bottom: 26px; }
+      .cover {
+        background: linear-gradient(160deg, #0f3559 0%, #1d5ba5 62%, #2a6cb6 100%);
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .cover-hero {
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.30);
+        box-shadow: 0 18px 40px rgba(4, 12, 24, 0.38);
+        margin-bottom: 20px;
+      }
+      .cover-hero img {
+        display: block;
+        width: 100%;
+      }
+      .cover h1 {
+        color: #fff;
+        font-size: 36px;
+        margin-bottom: 4px;
+      }
+      .cover .tagline {
+        font-size: 17px;
+        opacity: 0.94;
+        margin-bottom: 18px;
+      }
       .cover .card { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.35); border-radius: 14px; padding: 18px 20px; }
       .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
       .flow .node { background: #e6f0fa; border: 1.5px solid #b9d2ea; border-radius: 10px; padding: 10px 12px; font-size: 13px; text-align: center; min-width: 112px; color: #144a86; font-weight: 600; }
@@ -46,6 +71,7 @@
   </head>
   <body>
 <div class="page cover">
+      <div class="cover-hero"><img src="../screenshots/hero.png" alt="Livecast" /></div>
       <h1>Livecast</h1>
       <p class="tagline">How to set up a broadcast, simply.</p>
       <div class="card">
@@ -66,7 +92,7 @@
           edits needed.
         </p>
       </div>
-      <p class="small" style="margin-top: 30px; color: #cfe0f2">
+      <p class="small" style="margin-top: auto; margin-bottom: 10mm; color: #cfe0f2">
         Quick guide · version 1.0 · https://github.com/sdagostino777/livecast
       </p>
       <div class="footer" style="color: #cfe0f2; border-color: rgba(255,255,255,.25)">
