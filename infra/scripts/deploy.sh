@@ -97,7 +97,12 @@ fi
 log "Installing dependencies and building"
 ${SSH} "set -euo pipefail
   cd ${APP_DIR}
-  corepack enable >/dev/null 2>&1 || true
+  # corepack's shim can be present yet fail to resolve its cached pnpm
+  # (MODULE_NOT_FOUND under ~/.cache/node/corepack). A real pnpm@12 install is
+  # one npm command and cannot half-work.
+  if ! pnpm --version 2>/dev/null | grep -q '^12\.'; then
+    npm install -g pnpm@12.14.0 >/dev/null 2>&1
+  fi
   pnpm install --frozen-lockfile
   pnpm --filter @ndx-live/api build
   pnpm --filter @ndx-live/web build
