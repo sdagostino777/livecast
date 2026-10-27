@@ -49,6 +49,10 @@ fi
 # --- 2. Transfer source -----------------------------------------------------
 
 log "Syncing source to ${SSH_HOST}:${APP_DIR}"
+# provision.sh owns the directory tree, but a first deploy with no
+# --provision (or a VPS where the app dir was removed) still has to land
+# somewhere: create it root-owned, provision re-owns it afterwards.
+${SSH} "mkdir -p ${APP_DIR}"
 # .env, data and node_modules are server state, never local state:
 # `--delete` would otherwise wipe the production credentials and the database.
 ${SCP_SYNC} \
