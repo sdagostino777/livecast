@@ -63,6 +63,7 @@ export function Admin() {
   const [pubKind, setPubKind] = useState<null | "camera" | "screen">(null);
   const [pubError, setPubError] = useState<string | null>(null);
   const [leavePrompt, setLeavePrompt] = useState<(() => void) | null>(null);
+  const [previewTick, setPreviewTick] = useState(0);
   const pubPc = useRef<RTCPeerConnection | null>(null);
   const pubMedia = useRef<MediaStream | null>(null);
   const pubVideo = useRef<HTMLVideoElement | null>(null);
@@ -87,6 +88,9 @@ export function Admin() {
       setOv(overview);
       const single = overview.stream ?? streamList.streams[0] ?? null;
       setCurrent(single);
+      // Bumping this re-requests the generated artwork, so the preview follows
+      // the title/palette the operator just typed.
+      setPreviewTick((tick) => tick + 1);
       setTitleDraft((draft) => (draft === "" && single ? single.title : draft));
       setError(null);
     } catch (err) {
@@ -405,6 +409,7 @@ export function Admin() {
         )}
 
         <BroadcastConfig
+          previewTick={previewTick}
           current={current}
           onAir={onAir}
           busy={busy}
@@ -546,6 +551,7 @@ export function Admin() {
 }
 
 function BroadcastConfig({
+  previewTick,
   current,
   onAir,
   busy,
@@ -554,6 +560,7 @@ function BroadcastConfig({
   onAutoSave,
   onCreate,
 }: {
+  previewTick: number;
   current: StreamView | null;
   onAir: boolean;
   busy: boolean;
@@ -737,7 +744,7 @@ function BroadcastConfig({
           <div className="poster-wrap">
             <img
               className="thumb poster-thumb big"
-              src={posterPreview ?? (current ? posterSrc(current) : undefined)}
+              src={posterPreview ?? (current ? `${posterSrc(current)}?v=${previewTick}` : undefined)}
               alt=""
             />
             {onAir && (
@@ -746,7 +753,9 @@ function BroadcastConfig({
               </span>
             )}
           </div>
-          {current?.iconUrl && <img className="thumb icon-thumb" src={iconSrc(current)} alt="" />}
+          {current?.iconUrl && (
+            <img className="thumb icon-thumb" src={`${iconSrc(current)}?v=${previewTick}`} alt="" />
+          )}
         </div>
 
         {!current && (

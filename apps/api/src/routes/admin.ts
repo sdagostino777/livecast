@@ -578,7 +578,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
-    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "private, max-age=60");
+    // no-store: this artwork is rendered from the title and palette the operator
+    // is editing right now; a cached copy made the preview look frozen.
+    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "no-store");
     return posterSvg({ title: stream.title, brand: app.settings.get().brandName, seed: stream.slug, palette: stream.poster_palette });
   });
 
@@ -589,7 +591,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     if (!params.ok) return reply.code(400).send({ error: "invalid_request" });
     const stream = getStreamById(app.db, params.data.id);
     if (!stream) return reply.code(404).send({ error: "not_found" });
-    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "private, max-age=60");
+    reply.header("content-type", "image/svg+xml; charset=utf-8").header("cache-control", "no-store");
     return iconSvg({ title: stream.title, seed: stream.slug, palette: stream.poster_palette });
   });
 
