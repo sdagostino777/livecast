@@ -25,7 +25,7 @@ SSH_HOST="${SSH_HOST:-root@187.77.174.159}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/ndx_vps}"
 APP_DIR="/srv/ndx-live/app"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:4100/api/health}"
-SSH="ssh -i ${SSH_KEY} -o BatchMode=yes -o ServerAliveInterval=30 -o ConnectTimeout=15"
+SSH="ssh -i ${SSH_KEY} -o BatchMode=yes -o ServerAliveInterval=30 -o ConnectTimeout=15 ${SSH_HOST}"
 
 # macOS ships openrsync at /usr/bin/rsync, which rejects this script's options
 # ("hostname contains invalid characters"). Prefer a real GNU rsync — Homebrew's
