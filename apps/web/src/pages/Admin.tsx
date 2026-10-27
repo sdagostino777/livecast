@@ -201,6 +201,18 @@ export function Admin() {
     });
   }
 
+  /**
+   * An image chosen for an event that already exists uploads immediately: the
+   * panel has no save button, so waiting for one meant nothing happened.
+   */
+  async function uploadImage(kind: "poster" | "icon", file: File) {
+    if (!current) return;
+    await act(async () => {
+      await uploadStreamImage(current.id, kind, file);
+      notify(kind === "poster" ? "Immagine caricata." : "Icona caricata.");
+    });
+  }
+
   /** Live-updating configuration: the panel has no save button any more. */
   async function autoSaveConfig(patch: {
     title?: string;
@@ -429,6 +441,7 @@ export function Admin() {
           setTitleDraft={setTitleDraft}
           onAutoSave={autoSaveConfig}
           onCreate={saveConfig}
+          onUploadImage={uploadImage}
         />
 
         <hr className="sep" />
@@ -573,6 +586,7 @@ function BroadcastConfig({
   setTitleDraft,
   onAutoSave,
   onCreate,
+  onUploadImage,
 }: {
   previewTick: number;
   current: StreamView | null;
@@ -592,6 +606,7 @@ function BroadcastConfig({
     record: boolean,
     files: { poster?: File; icon?: File; palette?: string | null },
   ) => Promise<void>;
+  onUploadImage: (kind: "poster" | "icon", file: File) => Promise<void>;
 }) {
   const [kind, setKind] = useState<"video" | "audio">("video");
   const [record, setRecord] = useState(false);
@@ -737,9 +752,20 @@ function BroadcastConfig({
               hidden
               onChange={(event) => {
                 const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                if (!file) return;
                 setPosterFile(file);
                 if (posterPreview) URL.revokeObjectURL(posterPreview);
-                setPosterPreview(file ? URL.createObjectURL(file) : null);
+                setPosterPreview(URL.createObjectURL(file));
+                if (current) {
+                  void onUploadImage("poster", file).then(() => {
+                    setPosterFile(null);
+                    setPosterPreview((preview) => {
+                      if (preview) URL.revokeObjectURL(preview);
+                      return null;
+                    });
+                  });
+                }
               }}
             />
             <button type="button" className="btn btn-ghost btn-small" disabled={onAir} onClick={() => posterRef.current?.click()}>
@@ -753,8 +779,11 @@ function BroadcastConfig({
                 hidden
                 disabled={onAir}
                 onChange={(event) => {
-                  setIconFile(event.target.files?.[0] ?? null);
+                  const file = event.target.files?.[0] ?? null;
                   event.target.value = "";
+                  if (!file) return;
+                  if (current) void onUploadImage("icon", file);
+                  else setIconFile(file);
                 }}
               />
             </label>
