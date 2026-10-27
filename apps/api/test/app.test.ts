@@ -157,15 +157,6 @@ describe("auth", () => {
     });
     expect(correct.statusCode).toBe(200);
   });
-      expect(res.statusCode).toBe(401);
-    }
-    const blocked = await app.inject({
-      method: "POST",
-      url: "/api/auth/login",
-      payload: { username: USERNAME, password: PASSWORD },
-    });
-    expect(blocked.statusCode).toBe(429);
-  });
 });
 
 describe("admin + public stream lifecycle", () => {
