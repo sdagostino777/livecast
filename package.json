@@ -6,9 +6,6 @@
   "engines": {
     "node": ">=22"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
-  },
   "scripts": {
     "dev:api": "pnpm --filter @ndx-live/api dev",
     "dev:web": "pnpm --filter @ndx-live/web dev",

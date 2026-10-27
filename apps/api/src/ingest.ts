@@ -6,31 +6,36 @@
  * this file: the public one (what goes into OBS, built from the operator-edited
  * settings) and the loopback one (what FFmpeg uses, with credentials the admin
  * never needs to see).
+ *
+ * Credentials travel as `?user=&pass=` query parameters, not as `user:pass@` in
+ * the authority: MediaMTX strips the userinfo when parsing an RTMP URL, so the
+ * userinfo form authenticates as anonymous and is rejected. This was verified
+ * against MediaMTX 1.21 (see docs/RUNBOOK.md).
  */
 import { config } from "./config.js";
 import type { RuntimeSettings } from "./settings.js";
 
-/** OBS "Server" field without credentials, e.g. rtmp://live.ndx-llc.com:1935/live */
+function withQuery(base: string, user: string, pass: string): string {
+  const url = new URL(base);
+  url.searchParams.set("user", user);
+  url.searchParams.set("pass", pass);
+  return url.toString();
+}
+
+/** The OBS "Server" value without credentials, e.g. rtmp://live.example.com:1935/live */
 export function ingestServer(settings: RuntimeSettings): string {
   return `rtmp://${settings.ingestHost}:${settings.ingestPort}/${config.ingestPath}`;
 }
 
-/** The full URL to paste into OBS, credentials included (admin-authenticated page only). */
+/** The full URL to paste into OBS (admin-authenticated page only). Stream key stays empty. */
 export function ingestServerWithCreds(settings: RuntimeSettings): string | null {
   if (!config.publishPass) return null;
-  return ingestServer(settings).replace(
-    "rtmp://",
-    `rtmp://${encodeURIComponent(config.publishUser)}:${encodeURIComponent(config.publishPass)}@`,
-  );
+  return withQuery(ingestServer(settings), config.publishUser, config.publishPass);
 }
 
-/** What FFmpeg reads on loopback, e.g. rtmp://reader:pass@127.0.0.1:1935/live */
+/** What FFmpeg reads on loopback, e.g. rtmp://127.0.0.1:1935/live?user=reader&pass=… */
 export function mediaInputUrl(): string {
-  const url = new URL(config.mediamtxRtmpUrl);
-  if (config.mediaReadUser) {
-    url.username = config.mediaReadUser;
-    url.password = config.mediaReadPass;
-  }
-  url.pathname = `/${config.ingestPath}`;
-  return url.toString();
+  const base = config.mediamtxRtmpUrl.replace(/\/+$/, "") + `/${config.ingestPath}`;
+  if (!config.mediaReadUser) return base;
+  return withQuery(base, config.mediaReadUser, config.mediaReadPass);
 }

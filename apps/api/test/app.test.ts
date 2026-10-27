@@ -347,6 +347,31 @@ describe("admin + public stream lifecycle", () => {
     expect((await app.inject({ method: "POST", url: "/api/admin/cdn-test", payload: {} })).statusCode).toBe(401);
   });
 
+  it("ends streams orphaned by a restart instead of blocking the next broadcast", async () => {
+    const cookie = await login();
+    const created = await app.inject({ method: "POST", url: "/api/admin/streams", headers: { cookie }, payload: { title: "orphan" } });
+    const stream = created.json().stream;
+    await app.inject({ method: "POST", url: `/api/admin/streams/${stream.id}/start`, headers: { cookie } });
+
+    // Simulate a process restart: a new app build over the same database.
+    const { buildApp } = await import("../src/app.js");
+    const restarted = await buildApp({
+      dbFile: path.join(dir, "db.sqlite"),
+      webRoot: path.join(dir, "missing-web"),
+      pipeline: makeFakePipeline(),
+      mediamtx: new MediaMtxClient("http://127.0.0.1:1", 100),
+    });
+    const restartedCookie = cookieOf(
+      await restarted.inject({ method: "POST", url: "/api/auth/login", payload: { username: USERNAME, password: PASSWORD } }),
+    );
+    const overview = await restarted.inject({ method: "GET", url: "/api/admin/overview", headers: { cookie: restartedCookie } });
+    expect(overview.json().stream).toBeNull();
+    await restarted.close();
+
+    const after = await app.inject({ method: "GET", url: "/api/live/" + stream.slug });
+    expect(after.json().status).toBe("ended");
+  });
+
   it("rejects unknown and malformed stream slugs", async () => {
     expect((await app.inject({ method: "GET", url: "/api/live/aaaaaaaaaa" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/api/live/NOT-A-SLUG" })).statusCode).toBe(404);

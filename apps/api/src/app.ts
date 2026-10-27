@@ -19,6 +19,7 @@ import { SettingsStore, type RuntimeSettings } from "./settings.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { liveRoutes } from "./routes/live.js";
+import { reconcileOrphans } from "./streams.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -54,6 +55,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   app.decorate("pipeline", opts.pipeline ?? new HlsPipeline());
   app.decorate("mediamtx", opts.mediamtx ?? new MediaMtxClient(config.mediamtxApiUrl));
   app.decorate("settings", new SettingsStore(app.db));
+
+  // The encoder supervisor is memory, not database. After a restart, any stream
+  // still marked starting/live is a row without a process — end it now rather
+  // than let it block the next broadcast through the one-active-stream index.
+  const orphans = reconcileOrphans(app.db);
+  if (orphans > 0) app.log.warn({ orphans }, "ended orphaned streams left by a previous process");
 
   await app.register(cookie);
   await app.register(rateLimit, { global: true, max: 300, timeWindow: "1 minute", keyGenerator: (req) => req.ip });

@@ -6,6 +6,7 @@
  * must never disagree.
  */
 import type { Db } from "./db.js";
+import { audit } from "./db.js";
 import { newId, newSlug, nowIso } from "./ids.js";
 
 export type StreamStatus = "draft" | "starting" | "live" | "ended";
@@ -102,4 +103,21 @@ export function setStreamStatus(db: Db, id: string, status: StreamStatus, at: st
 
 export function deleteStreamRow(db: Db, id: string): void {
   db.prepare("DELETE FROM streams WHERE id = ?").run(id);
+}
+
+/**
+ * A stream marked starting/live in the database but with no encoder process is
+ * an orphan: it can only happen after a restart (the pipeline lives in memory).
+ * Left alone it would block every future broadcast, because the schema allows
+ * one active stream. Ending it on boot is the honest state — the video is gone.
+ */
+export function reconcileOrphans(db: Db): number {
+  const rows = db
+    .prepare("SELECT id, slug FROM streams WHERE status IN ('starting','live')")
+    .all() as Array<{ id: string; slug: string }>;
+  for (const row of rows) {
+    db.prepare("UPDATE streams SET status = 'ended', ended_at = ? WHERE id = ?").run(nowIso(), row.id);
+    audit(db, { action: "stream_orphaned", detail: row.slug });
+  }
+  return rows.length;
 }
