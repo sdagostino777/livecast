@@ -33,9 +33,23 @@ export function ingestServerWithCreds(settings: RuntimeSettings, path: string = 
   return withQuery(ingestServer(settings, path), config.publishUser, config.publishPass);
 }
 
-/** What FFmpeg reads on loopback, e.g. rtmp://127.0.0.1:1935/live?user=reader&pass=… */
+/** What FFmpeg reads on loopback via RTMP, e.g. rtmp://127.0.0.1:1935/live?user=… */
 export function mediaInputUrl(path: string = config.ingestPath): string {
   const base = config.mediamtxRtmpUrl.replace(/\/+$/, "") + `/${path}`;
   if (!config.mediaReadUser) return base;
   return withQuery(base, config.mediaReadUser, config.mediaReadPass);
+}
+
+/**
+ * The same stream read over RTSP. MediaMTX republishes every path on RTSP
+ * regardless of how it was published, so this is the encoder's first choice:
+ * RTMP readers reject WebRTC-published streams with an I/O error.
+ */
+export function mediaRtspInputUrl(path: string = config.ingestPath): string {
+  const url = new URL(config.mediamtxRtspUrl.replace(/\/+$/, "") + `/${path}`);
+  if (config.mediaReadUser) {
+    url.username = config.mediaReadUser;
+    url.password = config.mediaReadPass;
+  }
+  return url.toString();
 }

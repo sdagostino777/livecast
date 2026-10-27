@@ -40,7 +40,7 @@ import { requireSession } from "../session.js";
 import { createStreamRow, deleteStreamRow, getActiveStream, getStreamById, listStreams, setStreamStatus, toView } from "../streams.js";
 import { SettingsPatch } from "../settings.js";
 import { iconSvg, posterSvg } from "../poster.js";
-import { ingestServer, ingestServerWithCreds, mediaInputUrl } from "../ingest.js";
+import { ingestServer, ingestServerWithCreds, mediaInputUrl, mediaRtspInputUrl } from "../ingest.js";
 
 const CreateStreamBody = z.object({
   title: z.string().trim().min(1).max(120),
@@ -439,9 +439,13 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       app.pipeline.start(
         {
           ffmpegBin: config.ffmpegBin,
+          // RTSP first: it reads streams published by the browser (WebRTC) as
+          // well as by external programs (RTMP). RTMP is the fallback.
           inputUrls: {
-            primary: mediaInputUrl(config.ingestPath),
-            backup: mediaInputUrl(config.ingestBackupPath),
+            primary: mediaRtspInputUrl(config.ingestPath),
+            backup: mediaRtspInputUrl(config.ingestBackupPath),
+            fallbackPrimary: mediaInputUrl(config.ingestPath),
+            fallbackBackup: mediaInputUrl(config.ingestBackupPath),
           },
           probeReady: async (which) => {
             const pathReady = await app.mediamtx.getPath(

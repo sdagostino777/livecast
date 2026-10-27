@@ -43,6 +43,9 @@ export const config = {
   mediamtxApiUrl: str("MEDIAMTX_API_URL", "http://127.0.0.1:9997"),
   /** RTMP address FFmpeg reads the ingested live stream from (localhost). */
   mediamtxRtmpUrl: str("MEDIAMTX_RTMP_URL", "rtmp://127.0.0.1:1935"),
+  /** RTSP address on loopback: the encoder's preferred way in (works for both
+   *  RTMP and WebRTC publishers); RTMP stays as a fallback. */
+  mediamtxRtspUrl: str("MEDIAMTX_RTSP_URL", "rtsp://127.0.0.1:8554"),
   /** MediaMTX path the broadcaster publishes to. */
   ingestPath: str("INGEST_PATH", "live"),
   /** Second publish path, used as failover when the primary goes quiet. */

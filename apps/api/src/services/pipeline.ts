@@ -237,8 +237,14 @@ export interface PipelineApi {
 
 export interface PipelineStartOptions extends Omit<PipelineArgsOptions, "inputUrl" | "outDir"> {
   outDir: string;
-  /** Primary and optional failover publish paths, already resolved to RTMP URLs. */
-  inputUrls: { primary: string; backup: string | null };
+  /** Primary and optional failover publish paths (RTSP preferred). */
+  inputUrls: {
+    primary: string;
+    backup: string | null;
+    /** Tried after repeated open failures, e.g. RTMP when RTSP cannot read. */
+    fallbackPrimary?: string | null;
+    fallbackBackup?: string | null;
+  };
   /** Asked before every launch; the first path that answers true is used. */
   probeReady?: (which: "primary" | "backup") => Promise<boolean>;
   /** Inspects the source once; WebRTC publishers can be video-only (Opus audio
@@ -395,7 +401,18 @@ export class HlsPipeline implements PipelineApi {
       }
     }
     meta.currentInput = which;
-    const inputUrl = which === "backup" && meta.opts.inputUrls.backup ? meta.opts.inputUrls.backup : meta.opts.inputUrls.primary;
+    // After a few failed opens, try the other protocol: a WebRTC publisher is
+    // readable over RTSP but not over RTMP, and vice versa in edge cases.
+    const useFallback = meta.attempts >= 2;
+    const protocolUrl =
+      which === "backup"
+        ? useFallback && meta.opts.inputUrls.fallbackBackup
+          ? meta.opts.inputUrls.fallbackBackup
+          : (meta.opts.inputUrls.backup ?? meta.opts.inputUrls.primary)
+        : useFallback && meta.opts.inputUrls.fallbackPrimary
+          ? meta.opts.inputUrls.fallbackPrimary
+          : meta.opts.inputUrls.primary;
+    const inputUrl = protocolUrl;
 
     if (!meta.caps) {
       const probe = meta.opts.probeInput ?? ((url: string) => probeMedia(meta.opts.ffmpegBin, url));

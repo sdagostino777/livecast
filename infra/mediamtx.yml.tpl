@@ -54,7 +54,11 @@ apiAddress: 127.0.0.1:9997
 # a shared screen — no external software required.
 rtmp: yes
 rtmpAddress: :1935
-rtsp: no
+# RTSP on loopback: it is the reliable way for the encoder to read a stream
+# regardless of how it was published (RTMP from an external program, WebRTC
+# from the browser). Never exposed to the internet.
+rtsp: yes
+rtspAddress: 127.0.0.1:8554
 hls: no
 webrtc: yes
 webrtcAddress: 127.0.0.1:8889
