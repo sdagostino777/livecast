@@ -3,7 +3,7 @@ import { api, ApiError, Checks, iconSrc, Me, Overview, posterSrc, Settings, Stre
 import { useBrand } from "../brand";
 import { ForcePasswordChange } from "../components/ForcePasswordChange";
 import { BrandMark } from "../components/BrandMark";
-import { copyToClipboard, formatDate, formatTime, navigate } from "../router";
+import { copyToClipboard, formatDate, navigate } from "../router";
 
 function friendlyError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -372,26 +372,8 @@ export function Admin() {
         {current ? (
           <div className="stack">
             <div className="row-between">
-              <div className="row" style={{ alignItems: "center", gap: 16 }}>
-                <img className="thumb poster-thumb" src={posterSrc(current)} alt="" />
-                <div className="stack" style={{ gap: 8 }}>
-                  <button
-                    className="btn btn-online"
-                    disabled={busy || Boolean(active)}
-                    onClick={() => void startStream(current.id)}
-                    title="Manda in onda"
-                  >
-                    ● ONLINE
-                  </button>
-                  <button
-                    className="btn btn-stop"
-                    disabled={busy || !active}
-                    onClick={() => void stopStream(current.id)}
-                    title="Ferma la diretta"
-                  >
-                    ■ STOP
-                  </button>
-                </div>
+              <div className="row" style={{ alignItems: "flex-start", gap: 18 }}>
+                <img className="thumb poster-thumb big" src={posterSrc(current)} alt="" />
                 <div>
                   {editingTitle ? (
                     <form
@@ -456,73 +438,72 @@ export function Admin() {
               </div>
             </div>
 
-            <div className="obs">
-              <p className="small" style={{ margin: 0 }}>
-                <b>Collega la camera o lo schermo</b>: qui vedi l'anteprima e il collegamento al server, ma
-                <b>nessuno spettatore ti vede</b> finché non premi <b>● ONLINE</b>. La pagina deve restare aperta
-                durante la trasmissione — se la ricarichi o la chiudi, la diretta si interrompe. Per eventi lunghi è
-                più stabile un programma di trasmissione esterno, che riconnette da solo.
-              </p>
-              {pubKind === null ? (
-                <div className="row wrap">
-                  <button
-                    className="btn btn-primary btn-small"
-                    disabled={busy}
-                    onClick={() => void publishFromBrowser("camera")}
-                  >
-                    Collega camera
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-small"
-                    disabled={busy}
-                    onClick={() => void publishFromBrowser("screen")}
-                  >
-                    Collega schermo
-                  </button>
-                </div>
+            <div className="regia">
+              {pubKind ? (
+                <video ref={pubVideo} autoPlay muted playsInline className="regia-preview" />
               ) : (
-                <>
-                  <video ref={pubVideo} autoPlay muted playsInline className="pub-preview" />
-                  <p className="small" style={{ margin: 0 }}>
-                    {pubKind === "camera" ? "Camera" : "Schermo"} collegato —{" "}
-                    {active ? (
-                      <>
-                        <b>in onda</b>. <b>Non ricaricare la pagina.</b>
-                      </>
-                    ) : (
-                      <>
-                        <b>anteprima</b>: gli spettatori non ti vedono ancora. Premi <b>● ONLINE</b> quando sei
-                        pronto (e non ricaricare questa pagina).
-                      </>
-                    )}
-                  </p>
-                  <div>
-                    <button className="btn btn-danger btn-small" disabled={busy} onClick={stopPublishing}>
-                      Interrompi pubblicazione
+                <div className="regia-preview empty">
+                  <span className="small">Anteprima non attiva</span>
+                </div>
+              )}
+
+              <div className="regia-actions">
+                <button
+                  className="btn btn-online"
+                  disabled={busy || Boolean(active)}
+                  onClick={() => void startStream(current.id)}
+                  title="Manda in onda"
+                >
+                  ● ONLINE
+                </button>
+                <button
+                  className="btn btn-stop"
+                  disabled={busy || !active}
+                  onClick={() => void stopStream(current.id)}
+                  title="Ferma la diretta"
+                >
+                  ■ STOP
+                </button>
+
+                <div className="sep" style={{ margin: "10px 0" }} />
+
+                {pubKind === null ? (
+                  <div className="row wrap">
+                    <button
+                      className="btn btn-ghost btn-small"
+                      disabled={busy}
+                      onClick={() => void publishFromBrowser("camera")}
+                    >
+                      Collega camera
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-small"
+                      disabled={busy}
+                      onClick={() => void publishFromBrowser("screen")}
+                    >
+                      Collega schermo
                     </button>
                   </div>
-                </>
-              )}
-              {pubError && <p className="error-text small">{pubError}</p>}
-            </div>
+                ) : (
+                  <div className="stack" style={{ gap: 8 }}>
+                    <span className="small">
+                      {pubKind === "camera" ? "Camera" : "Schermo"} collegato — <b>{active ? "in onda" : "anteprima"}</b>
+                      {!active && ": nessuno ti vede finché non premi ● ONLINE"}
+                    </span>
+                    <div>
+                      <button className="btn btn-ghost btn-small" disabled={busy} onClick={stopPublishing}>
+                        Scollega
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-            {active && (
-              <p className="muted small">
-                In onda dalle {formatTime(active.startedAt)} · {active.record ? "registrazione attiva" : "nessuna registrazione"}
-              </p>
-            )}
-            {!current.posterUrl && (
-              <p className="muted small">
-                Stai usando il <b>template automatico</b> (titolo + gradiente, scelto in base al link). Carica
-                un'immagine per personalizzarlo: è quello che gli spettatori vedono prima di premere play.
-              </p>
-            )}
-            {!active && (
-              <p className="muted small">
-                Questa diretta è {current.status === "draft" ? "in bozza" : "terminata"}: premi <b>Vai in onda</b> per
-                iniziare la trasmissione.
-              </p>
-            )}
+                <p className="muted small" style={{ margin: 0 }}>
+                  La pagina deve restare aperta durante la trasmissione: se la ricarichi, la diretta si interrompe.
+                </p>
+                {pubError && <p className="error-text small">{pubError}</p>}
+              </div>
+            </div>
 
             {active && <ObsPanel ov={ov} />}
           </div>

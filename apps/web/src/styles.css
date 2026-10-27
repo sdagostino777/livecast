@@ -1102,6 +1102,65 @@ h2 {
   margin-right: 12px;
 }
 
+.poster-thumb.big {
+  width: 300px;
+  height: 169px;
+  margin-right: 0;
+  border-radius: 12px;
+}
+
+@media (max-width: 640px) {
+  .poster-thumb.big {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+}
+
+/* the on-air area: live preview with ONLINE / STOP beside it */
+.regia {
+  display: flex;
+  gap: 18px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  border: 1.5px dashed var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--surface-2);
+}
+
+.regia-preview {
+  width: 360px;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: #04101d;
+  object-fit: cover;
+  flex: none;
+}
+
+.regia-preview.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8fa6ba;
+  border: 1px solid #22303c;
+}
+
+@media (max-width: 720px) {
+  .regia-preview {
+    width: 100%;
+  }
+}
+
+.regia-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  min-width: 220px;
+  flex: 1;
+}
+
 .icon-thumb {
   width: 40px;
   height: 40px;
